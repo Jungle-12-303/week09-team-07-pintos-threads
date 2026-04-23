@@ -12,7 +12,9 @@
 *.raw
 *.hex
 *.dis
+*.dsk
 *.dump
+
 
 # 빌드 디렉터리
 **/build/
