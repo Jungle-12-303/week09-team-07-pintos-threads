@@ -1,0 +1,3 @@
+# Linux-executed Pintos helper scripts must keep LF line endings.
+pintos/activate text eol=lf
+pintos/utils/* text eol=lf
