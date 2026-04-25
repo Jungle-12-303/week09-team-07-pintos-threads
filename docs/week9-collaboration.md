@@ -74,6 +74,7 @@ Project URL: https://github.com/orgs/Jungle-12-303/projects/4
 - 통과한 테스트와 아직 남은 테스트
 - 구현 의도 또는 설계 가정
 - 남아 있는 리스크 또는 확인이 필요한 부분
+- 이 저장소의 tracked text 파일은 `.gitattributes`에 따라 LF 줄바꿈으로 관리한다.
 
 `dev` 병합 기준은 다음과 같다.
 
