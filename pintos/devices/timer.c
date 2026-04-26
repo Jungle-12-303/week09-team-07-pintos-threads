@@ -46,6 +46,9 @@ timer_init (void) {
 }
 
 /* Calibrates loops_per_tick, used to implement brief delays. */
+/* 1 tick 동안 busy-wait 루프를 몇 번 돌 수 있는지 측정 
+ * 1 tick보다 짧은 ms/us/ns 단위 지연은 타이머 tick으로 재기 애매하니, CPU 루프를 직접 돌림
+ */
 void
 timer_calibrate (void) {
 	unsigned high_bit, test_bit;
@@ -70,21 +73,26 @@ timer_calibrate (void) {
 	printf ("%'"PRIu64" loops/s.\n", (uint64_t) loops_per_tick * TIMER_FREQ);
 }
 
-/* Returns the number of timer ticks since the OS booted. */
+/* 부팅 이후 누적된 timer tick 수 반환
+ * timer_interrupt()가 ticks를 증가시키므로, 읽는 동안 인터럽트를 잠깐 꺼서 tick 값이 중간에 바뀌지 않게 보호
+ * 
+ * [추가] 왜 굳이 전역 ticks 변수를 읽지 않고, timer_ticks 함수를 사용하는가?
+ * 	     >>> 그냥 전역 ticks를 직접 읽으면 race condition 가능성이 있기 때문
+ */
 int64_t
 timer_ticks (void) {
-	enum intr_level old_level = intr_disable ();
-	int64_t t = ticks;
-	intr_set_level (old_level);
-	barrier ();
-	return t;
+	enum intr_level old_level = intr_disable (); // 현재 인터럽트 상태 저장 후 인터럽트 비활성화
+	int64_t t = ticks; // 전역 tick 카운터를 지역 변수로 복사
+	intr_set_level (old_level); // timer_ticks() 호출 전 인터럽트 상태로 복구
+	barrier ();  // 컴파일러가 tick 읽기 순서를 재배치하지 못하게 제한
+	return t; // 누적된 timer tick 수 반환
 }
 
 /* Returns the number of timer ticks elapsed since THEN, which
    should be a value once returned by timer_ticks(). */
 int64_t
 timer_elapsed (int64_t then) {
-	return timer_ticks () - then;
+	return timer_ticks () - then; // `then` 시점부터 지금까지 지난 tick 수 계산
 }
 
 /* Suspends execution for approximately TICKS timer ticks. */
@@ -120,10 +128,14 @@ void
 timer_print_stats (void) {
 	printf ("Timer: %"PRId64" ticks\n", timer_ticks ());
 }
-
-/* Timer interrupt handler. */
+
+/* 8254 PIT 타이머 인터럽트 핸들러
+ * TIMER_FREQ가 100이므로 기본 설정에서는 초당 100번 호출
+ * 즉 1 tick은 약 10ms
+ */
 static void
 timer_interrupt (struct intr_frame *args UNUSED) {
+	/* 이미 INTR_OFF에서 동작하므로 인터럽트 걱정은 하지 않아도 됨 */
 	ticks++;
 	thread_tick ();
 }
