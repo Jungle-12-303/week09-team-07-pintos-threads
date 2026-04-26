@@ -28,3 +28,10 @@ core
 
 # macOS
 .DS_Store
+
+# 구현 문서
+docs/
+
+# 테스트 채점 프로그램
+*.sh
+.test_config
