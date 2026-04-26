@@ -98,11 +98,20 @@ timer_elapsed (int64_t then) {
 /* Suspends execution for approximately TICKS timer ticks. */
 void
 timer_sleep (int64_t ticks) {
-	int64_t start = timer_ticks ();
+	if (ticks <= 0) // sleep이 필요 없는 경우 리턴
+		return;
+	
+	int64_t start = timer_ticks (); // 현재 ticks start에 저장
+	
+	enum intr_level old_level = intr_disable();
 
-	ASSERT (intr_get_level () == INTR_ON);
-	while (timer_elapsed (start) < ticks)
-		thread_yield ();
+	struct thread *t = thread_current ();
+	ASSERT (intr_get_level () == INTR_OFF); // 현재 인터럽트 상태가 꺼져있는 경우 통과
+
+	t->wakeup_tick = start + ticks; // 현재 스레드 구조체 일어나야 할 시간에 일어나야 할 절대시간 대입
+	insert_sleep(t);
+	thread_block();
+	intr_set_level(old_level); // 이전 인터럽트 상태로 되돌림
 }
 
 /* Suspends execution for approximately MS milliseconds. */
@@ -138,6 +147,7 @@ timer_interrupt (struct intr_frame *args UNUSED) {
 	/* 이미 INTR_OFF에서 동작하므로 인터럽트 걱정은 하지 않아도 됨 */
 	ticks++;
 	thread_tick ();
+	thread_wakeup(timer_ticks());
 }
 
 /* Returns true if LOOPS iterations waits for more than one timer
