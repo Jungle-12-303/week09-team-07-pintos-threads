@@ -28,3 +28,22 @@ core
 
 # macOS
 .DS_Store
+Thumbs.db
+
+# IDE / editor
+.vscode/
+.idea/
+*.code-workspace
+
+# Local navigation / debugging tools
+cscope.out
+cscope.in.out
+cscope.po.out
+tags
+.gdb_history
+
+# 로컬 파일
+/local
+.test_config
+docs/pintos-kaist-md/
+pintos/**/select_test.sh
