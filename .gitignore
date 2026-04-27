@@ -44,3 +44,6 @@ tags
 
 # 로컬 파일
 /local
+.test_config
+docs/pintos-kaist-md/
+pintos/**/select_test.sh
