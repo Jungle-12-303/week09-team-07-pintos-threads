@@ -216,7 +216,7 @@ thread_create (const char *name, int priority,
 }
 
 /* tick이 가장 빠른 순서대로 정렬을 위한 함수 (오름차순) */
-bool
+static bool
 wakeup_recently (const struct list_elem *a,
                const struct list_elem *b,
                void *aux UNUSED)
