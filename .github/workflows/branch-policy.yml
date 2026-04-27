@@ -1,0 +1,131 @@
+name: branch-policy
+
+on:
+  pull_request:
+    branches:
+      - main
+      - dev
+    types:
+      - opened
+      - reopened
+      - synchronize
+      - edited
+      - ready_for_review
+  pull_request_review:
+    types:
+      - submitted
+      - edited
+      - dismissed
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  branch-policy:
+    name: branch-policy
+    if: >
+      github.event_name == 'pull_request' ||
+      (github.event_name == 'pull_request_review' &&
+       (github.event.pull_request.base.ref == 'main' || github.event.pull_request.base.ref == 'dev'))
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate branch and review policy
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            const baseBranch = pr.base.ref;
+            const headBranch = pr.head.ref;
+            const prAuthor = pr.user.login;
+            const headRepo = pr.head.repo.full_name;
+            const baseRepo = pr.base.repo.full_name;
+
+            const branchPolicy = {
+              donghyun: {
+                author: 'kdh949',
+                reviewers: ['legendLEE98', 'HyungminYoon1'],
+              },
+              changwon: {
+                author: 'legendLEE98',
+                reviewers: ['kdh949', 'HyungminYoon1'],
+              },
+              hyungmin: {
+                author: 'HyungminYoon1',
+                reviewers: ['kdh949', 'legendLEE98'],
+              },
+            };
+
+            function fail(message) {
+              core.setFailed(message);
+              throw new Error(message);
+            }
+
+            if (headRepo !== baseRepo) {
+              fail(`Pull requests must come from this repository, not ${headRepo}.`);
+            }
+
+            if (baseBranch === 'main') {
+              if (headBranch !== 'dev') {
+                fail(`Only dev -> main pull requests are allowed. Current head branch: ${headBranch}.`);
+              }
+
+              core.info('Allowed dev -> main pull request.');
+              return;
+            }
+
+            if (baseBranch !== 'dev') {
+              core.info(`No branch policy applies to base branch ${baseBranch}.`);
+              return;
+            }
+
+            const policy = branchPolicy[headBranch];
+            if (!policy) {
+              fail(`Only donghyun, changwon, or hyungmin branches may target dev. Current head branch: ${headBranch}.`);
+            }
+
+            if (prAuthor !== policy.author) {
+              fail(`${headBranch} -> dev pull requests must be opened by ${policy.author}. Current author: ${prAuthor}.`);
+            }
+
+            const { owner, repo } = context.repo;
+            const reviews = await github.paginate(github.rest.pulls.listReviews, {
+              owner,
+              repo,
+              pull_number: pr.number,
+              per_page: 100,
+            });
+
+            const latestReviewsByUser = new Map();
+            for (const review of reviews) {
+              if (!policy.reviewers.includes(review.user.login)) {
+                continue;
+              }
+
+              const previous = latestReviewsByUser.get(review.user.login);
+              const submittedAt = Date.parse(review.submitted_at || '1970-01-01T00:00:00Z');
+              const previousSubmittedAt = previous
+                ? Date.parse(previous.submitted_at || '1970-01-01T00:00:00Z')
+                : 0;
+
+              if (!previous || submittedAt >= previousSubmittedAt) {
+                latestReviewsByUser.set(review.user.login, review);
+              }
+            }
+
+            const missingApprovals = [];
+            for (const reviewer of policy.reviewers) {
+              const latestReview = latestReviewsByUser.get(reviewer);
+              if (!latestReview || latestReview.state !== 'APPROVED' || latestReview.commit_id !== pr.head.sha) {
+                missingApprovals.push(reviewer);
+              }
+            }
+
+            if (missingApprovals.length > 0) {
+              fail(
+                `${headBranch} -> dev requires latest approvals from: ${policy.reviewers.join(', ')}. ` +
+                `Missing current approvals from: ${missingApprovals.join(', ')}.`
+              );
+            }
+
+            core.info(`${headBranch} -> dev has the required approvals from ${policy.reviewers.join(', ')}.`);
