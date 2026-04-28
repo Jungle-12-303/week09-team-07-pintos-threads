@@ -575,6 +575,7 @@ schedule (void) {
 
 	ASSERT (intr_get_level () == INTR_OFF);
 	ASSERT (curr->status != THREAD_RUNNING);
+	ASSERT (next->status != THREAD_RUNNING); // 스레드 검사 조건 추가
 	ASSERT (is_thread (next));
 	/* Mark us as running. */
 	next->status = THREAD_RUNNING;
