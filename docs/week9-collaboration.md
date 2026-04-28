@@ -93,10 +93,15 @@ Project URL: https://github.com/orgs/Jungle-12-303/projects/4
 ## 8. 커밋 메시지와 PR 작성 규칙
 
 - 커밋은 한 가지 의도만 담고, 기능명이나 테스트명을 포함해 작성한다.
-- 커밋 메시지는 "무엇을 왜 바꿨는지"가 보이게 작성한다.
-- `fix`, `update`처럼 의미가 약한 단어만 단독으로 쓰지 않는다.
-- 커밋 예시: `alarm: fix simultaneous wakeup ordering`
-- 커밋 예시: `priority: yield after lowering current thread priority`
+- 커밋 메시지는 `<type>: <한국어 제목>` 형식을 따른다.
+- 커밋 제목에는 스코프를 사용하지 않는다. 영향 범위는 제목과 PR 본문에서 설명한다.
+- 허용 type은 `feat`, `fix`, `refactor`, `docs`, `test`, `chore`, `style`, `perf`, `build`, `ci`, `revert`이다.
+- 제목은 한국어 한 줄로 작성하고 마침표로 끝내지 않는다.
+- 제목은 행위가 아니라 변경 결과를 구체적으로 설명한다.
+- `수정`, `작업`, `변경`, `업데이트`, `update`, `fix`처럼 의미가 약한 표현만 단독으로 쓰지 않는다.
+- 커밋 예시: `feat: 세마포어 대기열을 우선순위 순서로 정렬`
+- 커밋 예시: `fix: 타이머 인터럽트에서 깨울 스레드 순서를 바로잡아`
+- 커밋 예시: `docs: README에 Dev Container 실행 방법을 정리`
 - PR 본문에는 관련 테스트, 수정 파일, 핵심 함수, 구현 의도, 통과/미통과 테스트, 남은 리스크를 함께 적는다.
 - PR 설명은 결과만 적지 말고, 어떤 설계 변경이 어떤 테스트에 영향을 줬는지 연결해서 쓴다.
 
