@@ -100,7 +100,14 @@ static const char *intr_names[INTR_CNT];
    sleep, although they may invoke intr_yield_on_return() to
    request that a new process be scheduled just before the
    interrupt returns. */
-static bool in_external_intr;   /* Are we processing an external interrupt? */
+
+/* 외부 인터럽트는 타이머와 같이 CPU 외부의 장치에서 생성되는 인터럽트입니다.
+
+	외부 인터럽트는 인터럽트 기능이 꺼진 상태에서 실행되므로,
+	중첩되거나 선점되지 않습니다.
+	외부 인터럽트 핸들러는 슬립할 수 없지만,
+	인터럽트가 반환되기 직전에 새로운 프로세스가 스케줄링되도록 요청하기 위해 intr_yield_on_return() 함수를 호출할 수 있습니다. */
+static bool in_external_intr;   /* Are we processing an external interrupt? */ // 외부 인터럽트를 처리하고 있습니까?
 static bool yield_on_return;    /* Should we yield on interrupt return? */
 
 /* Programmable Interrupt Controller helpers. */
@@ -126,6 +133,8 @@ intr_get_level (void) {
 
 /* Enables or disables interrupts as specified by LEVEL and
    returns the previous interrupt status. */
+/* LEVEL에 지정된 대로 인터럽트를 활성화 또는 비활성화하고
+이전 ​​인터럽트 상태를 반환합니다. */
 enum intr_level
 intr_set_level (enum intr_level level) {
 	return level == INTR_ON ? intr_enable () : intr_disable ();
@@ -147,6 +156,7 @@ intr_enable (void) {
 }
 
 /* Disables interrupts and returns the previous interrupt status. */
+/* 인터럽트를 비활성화하고 이전 인터럽트 상태를 반환합니다. */
 enum intr_level
 intr_disable (void) {
 	enum intr_level old_level = intr_get_level ();

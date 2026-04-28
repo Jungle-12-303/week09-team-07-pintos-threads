@@ -31,6 +31,38 @@
    elements allows us to do a little bit of checking on some
    operations, which can be valuable.) */
 
+/* 이중 연결 리스트는 두 개의 헤더 요소, 즉 첫 번째 요소 바로 앞에 있는 "head"와 마지막 요소 바로 뒤에 있는 "tail"을 가지고 있습니다.
+
+	앞쪽 헤더의 `prev` 링크는 null이고,
+	뒤쪽 헤더의 `next` 링크도 null입니다. 나머지 두 링크는
+	리스트의 내부 요소를 통해 서로를 가리킵니다.
+
+	빈 리스트는 다음과 같습니다.
+
+   +------+     +------+
+   <---| head |<--->| tail |--->
+   +------+     +------+
+
+	두 개의 요소가 있는 리스트는 다음과 같습니다.
+
+	+------+     +-------+     +-------+     +------+
+	<---| head |<--->|   1   |<--->|   2   |<--->| tail |<--->
+	+------+     +-------+     +-------+     +------+
+
+	이러한 대칭 구조 덕분에 리스트 처리에서 많은 특수한 경우를 피할 수 있습니다.
+
+	/ 예를 들어, 다음 함수를 살펴보세요.
+
+	list_remove() 함수는 포인터 할당 두 개만 사용하고 조건문은 필요하지 않습니다.
+
+	이는 헤더 요소가 없는 코드보다 훨씬 간단합니다.
+
+	(각 헤더 요소의 포인터 중 하나만 사용되므로,
+	실제로 하나의 헤더 요소로 결합해도 이 단순성을 유지할 수 있습니다.
+
+	하지만 두 개의 별도 요소를 사용하면
+	일부 작업에 대해 약간의 검사를 수행할 수 있으며, 이는 유용할 수 있습니다.) */
+   
 static bool is_sorted (struct list_elem *a, struct list_elem *b,
 		list_less_func *less, void *aux) UNUSED;
 
@@ -73,6 +105,10 @@ list_begin (struct list *list) {
 /* Returns the element after ELEM in its list.  If ELEM is the
    last element in its list, returns the list tail.  Results are
    undefined if ELEM is itself a list tail. */
+
+/* 리스트에서 ELEMENT 바로 다음 요소를 반환합니다. 
+	ELEMENT가 리스트의 마지막 요소인 경우, 리스트의 꼬리를 반환합니다. 
+	ELEMENT 자체가 리스트의 꼬리인 경우에는 결과가 정의되지 않습니다. */
 struct list_elem *
 list_next (struct list_elem *elem) {
 	ASSERT (is_head (elem) || is_interior (elem));
@@ -84,6 +120,11 @@ list_next (struct list_elem *elem) {
    list_end() is often used in iterating through a list from
    front to back.  See the big comment at the top of list.h for
    an example. */
+
+/* 리스트의 끝(꼬리)을 반환합니다.
+	list_end()는 리스트를 앞에서 뒤로 순회할 때 자주 사용됩니다.
+	예제는 list.h 파일 상단의 큰 주석을 참조하세요.
+	*/
 struct list_elem *
 list_end (struct list *list) {
 	ASSERT (list != NULL);
@@ -120,6 +161,7 @@ list_prev (struct list_elem *elem) {
    ...do something with f...
    }
    */
+// 리스트 헤드 반환
 struct list_elem *
 list_rend (struct list *list) {
 	ASSERT (list != NULL);
@@ -136,7 +178,8 @@ list_rend (struct list *list) {
    {
    ...
    }
-   */
+*/
+// 리스트 헤드 반환
 struct list_elem *
 list_head (struct list *list) {
 	ASSERT (list != NULL);
@@ -144,6 +187,7 @@ list_head (struct list *list) {
 }
 
 /* Return's LIST's tail. */
+// 리스트의 꼬리 반환
 struct list_elem *
 list_tail (struct list *list) {
 	ASSERT (list != NULL);
@@ -153,6 +197,11 @@ list_tail (struct list *list) {
 /* Inserts ELEM just before BEFORE, which may be either an
    interior element or a tail.  The latter case is equivalent to
    list_push_back(). */
+
+/* BEFORE 바로 앞에 ELEM을 삽입합니다. 
+	BEFORE는 내부 요소이거나 리스트의 끝 부분일 수 있습니다.
+	끝 부분인 경우는 list_push_back()과 동일합니다. */
+	
 void
 list_insert (struct list_elem *before, struct list_elem *elem) {
 	ASSERT (is_interior (before) || is_tail (before));
@@ -191,6 +240,8 @@ list_splice (struct list_elem *before,
 
 /* Inserts ELEM at the beginning of LIST, so that it becomes the
    front in LIST. */
+/* LIST의 맨 앞에 ELEM을 삽입하여 LIST의 맨 앞에 위치시킵니다.
+	*/
 void
 list_push_front (struct list *list, struct list_elem *elem) {
 	list_insert (list_begin (list), elem);
@@ -198,6 +249,7 @@ list_push_front (struct list *list, struct list_elem *elem) {
 
 /* Inserts ELEM at the end of LIST, so that it becomes the
    back in LIST. */
+// 리스트 맨 끝으로 보낸다는 의미
 void
 list_push_back (struct list *list, struct list_elem *elem) {
 	list_insert (list_end (list), elem);
@@ -247,6 +299,8 @@ list_remove (struct list_elem *elem) {
 
 /* Removes the front element from LIST and returns it.
    Undefined behavior if LIST is empty before removal. */
+/* 리스트에서 맨 앞 요소를 제거하고 반환합니다.
+	제거 전에 리스트가 비어 있으면 정의되지 않은 동작이 발생합니다. */
 struct list_elem *
 list_pop_front (struct list *list) {
 	struct list_elem *front = list_front (list);
@@ -265,6 +319,8 @@ list_pop_back (struct list *list) {
 
 /* Returns the front element in LIST.
    Undefined behavior if LIST is empty. */
+/* LIST의 맨 앞 요소를 반환합니다.
+	LIST가 비어 있는 경우 정의되지 않은 동작이 발생합니다. */
 struct list_elem *
 list_front (struct list *list) {
 	ASSERT (!list_empty (list));
@@ -377,6 +433,10 @@ inplace_merge (struct list_elem *a0, struct list_elem *a1b0,
 /* Sorts LIST according to LESS given auxiliary data AUX, using a
    natural iterative merge sort that runs in O(n lg n) time and
    O(1) space in the number of elements in LIST. */
+
+/* 보조 데이터 AUX가 주어졌을 때 LESS를 기준으로 LIST를 정렬합니다.
+	이 정렬은 자연스러운 반복 병합 정렬을 사용하며, 시간 복잡도는 O(n lg n)이고
+	공간 복잡도는 LIST의 요소 수에 대해 O(1)입니다. */
 void
 list_sort (struct list *list, list_less_func *less, void *aux) {
 	size_t output_run_cnt;        /* Number of runs output in current pass. */
@@ -415,6 +475,8 @@ list_sort (struct list *list, list_less_func *less, void *aux) {
 /* Inserts ELEM in the proper position in LIST, which must be
    sorted according to LESS given auxiliary data AUX.
    Runs in O(n) average case in the number of elements in LIST. */
+/* 보조 데이터 AUX가 주어졌을 때, LESS 순서로 정렬된 LIST에 ELEM을 적절한 위치에 삽입합니다.
+	LIST의 요소 개수에 따라 평균적으로 O(n) 시간 복잡도로 실행됩니다. */
 void
 list_insert_ordered (struct list *list, struct list_elem *elem,
 		list_less_func *less, void *aux) {

@@ -2,6 +2,10 @@
    duration, M times.  Records the wake-up order and verifies
    that it is valid. */
 
+// 스레드 여러개 생성 후
+// 각 스레드가 서로 다른 고정된 시간동안 M번 잠듦.
+// 깨어난 시간을 기록하고 유효성 검증함.
+
 #include <stdio.h>
 #include "tests/threads/tests.h"
 #include "threads/init.h"
@@ -12,6 +16,7 @@
 
 static void test_sleep (int thread_cnt, int iterations);
 
+// test_sleep
 void
 test_alarm_single (void) 
 {
@@ -24,7 +29,9 @@ test_alarm_multiple (void)
   test_sleep (5, 7);
 }
 
+
 /* Information about the test. */
+// 테스트용 구조체
 struct sleep_test 
   {
     int64_t start;              /* Current time at start of test. */
@@ -35,7 +42,9 @@ struct sleep_test
     int *output_pos;            /* Current position in output buffer. */
   };
 
+
 /* Information about an individual thread in the test. */
+// 개별 스레드 정보
 struct sleep_thread 
   {
     struct sleep_test *test;     /* Info shared between all threads. */
@@ -47,18 +56,20 @@ struct sleep_thread
 static void sleeper (void *);
 
 /* Runs THREAD_CNT threads thread sleep ITERATIONS times each. */
+// 각 매개변수 스레드 갯수 N / 반복횟수 M
 static void
 test_sleep (int thread_cnt, int iterations) 
 {
-  struct sleep_test test;
-  struct sleep_thread *threads;
-  int *output, *op;
+  struct sleep_test test; // start / 반복횟수 | 출력 락 / 출력 포지션
+  struct sleep_thread *threads; // 구조체 test 하나 두고, id, 주소, 반복횟수
+  int *output, *op; // 아웃풋 주소
   int product;
-  int i;
+  int i; 
 
   /* This test does not work with the MLFQS. */
   ASSERT (!thread_mlfqs);
 
+  // iterations만큼 대기하는 thread_cnt 생성 - 기본 안내
   msg ("Creating %d threads to sleep %d times each.", thread_cnt, iterations);
   msg ("Thread 0 sleeps 10 ticks each time,");
   msg ("thread 1 sleeps 20 ticks each time, and so on.");
@@ -66,6 +77,7 @@ test_sleep (int thread_cnt, int iterations)
   msg ("sleep duration will appear in nondescending order.");
 
   /* Allocate memory. */
+  // 메모리 할당
   threads = malloc (sizeof *threads * thread_cnt);
   output = malloc (sizeof *output * iterations * thread_cnt * 2);
   if (threads == NULL || output == NULL)
@@ -79,8 +91,12 @@ test_sleep (int thread_cnt, int iterations)
 
   /* Start threads. */
   ASSERT (output != NULL);
+  // i는 thread 숫자만큼 반복
+  // 스레드 생성
   for (i = 0; i < thread_cnt; i++)
     {
+      // sleep_thread 포인터 t는
+      // threads + i; 
       struct sleep_thread *t = threads + i;
       char name[16];
       
