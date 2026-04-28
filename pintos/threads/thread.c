@@ -235,9 +235,9 @@ wakeup_recently (const struct list_elem *a,
     return ta->wakeup_tick < tb->wakeup_tick;
 }
 
-/* priority ready_list용 우선순위 비교 함수 */
-static bool 
-priority_compare (const struct list_elem *a, const struct list_elem *b, void *aux UNUSED) {
+/* 우선순위 비교 함수 - thread.c의 ready_list 및 synch.c의 sema waiters 에서 사용 */
+bool 
+thread_priority_compare (const struct list_elem *a, const struct list_elem *b, void *aux UNUSED) {
 	ASSERT (a != NULL && b != NULL);
 
 	struct thread *ta = list_entry (a, struct thread, elem);
@@ -282,7 +282,7 @@ thread_unblock (struct thread *t) {
 	old_level = intr_disable ();
 	ASSERT (t->status == THREAD_BLOCKED);
 	// list_push_back (&ready_list, &t->elem); // FIFO
-	list_insert_ordered (&ready_list, &t->elem, priority_compare, NULL); // 현재 스레드 t와 배교해서 올바른 위치에 정렬 삽입
+	list_insert_ordered (&ready_list, &t->elem, thread_priority_compare, NULL); // 현재 스레드 t와 배교해서 올바른 위치에 정렬 삽입
 	t->status = THREAD_READY;
 	intr_set_level (old_level);
 }
@@ -348,8 +348,8 @@ thread_yield (void) {
 
 	/* idle thread는 실행할 다른 스레드가 없을 때만 선택되는 특수 스레드 => ready_list에 들어가서 경쟁하는 스레드 X */
 	if (curr != idle_thread) { // 현재 스레드가 idle thread가 아닐 때
-		list_insert_ordered (&ready_list, &curr->elem, priority_compare, NULL); // ready_list에 정렬 삽입
-	} /* 여기서 priority_compare는 a 스레드의 priority가 b 스레드의 priority보다 높으면 true, 같거나 낮으면 false를 반환하는 함수*/
+		list_insert_ordered (&ready_list, &curr->elem, thread_priority_compare, NULL); // ready_list에 정렬 삽입
+	} /* 여기서 thread_priority_compare는 a 스레드의 priority가 b 스레드의 priority보다 높으면 true, 같거나 낮으면 false를 반환하는 함수*/
 
 	do_schedule (THREAD_READY); // THREAD_READY로 상태 전이
 	intr_set_level (old_level); // 비활성화 이전 원래의 인터럽트 상태 (비활성화 or 활성화)로 돌려둠
