@@ -674,7 +674,7 @@ static bool elem_comparison(struct list_elem *a, struct list_elem *b, void *aux)
 	return t_a->sleep_tick < t_b->sleep_tick;
 }
 
-static void thread_sleep (int64_t timer_ticks) {
+void thread_sleep (int64_t timer_ticks) {
 	// TODO
 	// 매개변수로 받아온게 start + ticks니까 어디까지 쉴거냐임
 	// 현재 쓰레드 호출

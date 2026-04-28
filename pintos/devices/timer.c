@@ -1,6 +1,7 @@
 #include "devices/timer.h"
 #include <debug.h>
 #include <inttypes.h>
+#include <thread.h>
 #include <list.h>
 #include <round.h>
 #include <stdio.h>
@@ -36,9 +37,6 @@ static bool too_many_loops (unsigned loops);
 static void busy_wait (int64_t loops);
 // (num / denom) 만큼 쉼 
 static void real_time_sleep (int64_t num, int32_t denom);
-
-// 직접 구현해야 할 thread_sleep
-static void thread_sleep (int64_t timer_ticks);
 
 /* Sets up the 8254 Programmable Interval Timer (PIT) to
    interrupt PIT_FREQ times per second, and registers the
