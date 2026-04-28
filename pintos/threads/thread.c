@@ -242,7 +242,7 @@ priority_compare (const struct list_elem *a, const struct list_elem *b, void *au
 
 	struct thread *ta = list_entry (a, struct thread, elem);
     struct thread *tb = list_entry (b, struct thread, elem);
-	
+
 	return ta->priority > tb->priority;
 }
 
@@ -355,10 +355,30 @@ thread_yield (void) {
 	intr_set_level (old_level); // 비활성화 이전 원래의 인터럽트 상태 (비활성화 or 활성화)로 돌려둠
 }
 
-/* Sets the current thread's priority to NEW_PRIORITY. */
+
+/*
+	1. 현재 스레드 priority를 new_priority로 바꾼다.
+	2. ready_list에 현재 스레드보다 더 높은 priority 스레드가 있는지 확인한다.
+	3. 있다면 thread_yield() 한다.
+*/
 void
 thread_set_priority (int new_priority) {
-	thread_current ()->priority = new_priority;
+	struct list_elem *first_node;
+	struct thread *t;
+
+	thread_current ()->priority = new_priority; // 현재 스레드 priority를 new_priority로 바꾼다.
+	
+	if (list_empty(&ready_list)) {
+		return;
+	}
+
+	first_node = list_front(&ready_list); // ready_list의 첫 list_elem을 가져온다.
+	t = list_entry (first_node, struct thread, elem); // 그 list_elem을 포함하는 thread를 꺼낸다.
+
+	// ready_list에 현재 스레드보다 더 높은 priority 스레드가 있는지 확인한다.
+	if ( t->priority > thread_current ()->priority) {
+		thread_yield(); // 있다면 thread_yield()
+	}
 }
 
 /* Returns the current thread's priority. */
@@ -368,6 +388,7 @@ thread_get_priority (void) {
 }
 
 /* Sets the current thread's nice value to NICE. */
+
 void
 thread_set_nice (int nice UNUSED) {
 	/* TODO: Your implementation goes here */
