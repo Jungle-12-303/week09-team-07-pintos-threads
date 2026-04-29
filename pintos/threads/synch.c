@@ -57,6 +57,11 @@ sema_init (struct semaphore *sema, unsigned value) {
    interrupts disabled, but if it sleeps then the next scheduled
    thread will probably turn interrupts back on. This is
    sema_down function. */
+/* 세마포어에 대한 다운 또는 "P" 연산입니다. SEMA 값이 양수가 될 때까지 기다린 후 원자적으로 값을 감소시킵니다.
+	이 함수는 대기할 수 있으므로 인터럽트 핸들러 내에서 호출해서는 안 됩니다.
+	인터럽트가 비활성화된 상태에서도 호출할 수 있지만,
+	대기하는 경우 다음에 예약된 스레드가 인터럽트를 다시 활성화할 가능성이 높습니다.
+	이 함수는 sema_down 함수입니다. */
 void
 sema_down (struct semaphore *sema) {
 	enum intr_level old_level;
@@ -272,6 +277,18 @@ cond_init (struct condition *cond) {
    interrupt handler.  This function may be called with
    interrupts disabled, but interrupts will be turned back on if
    we need to sleep. */
+
+/* LOCK을 원자적으로 해제하고 다른 코드에서 COND 신호가 발생할 때까지 기다립니다.
+	COND 신호가 발생하면 LOCK을 다시 획득한 후 반환합니다.
+	이 함수를 호출하기 전에 LOCK을 보유하고 있어야 합니다.
+	이 함수에서 구현된 모니터는 "Mesa" 스타일이며,
+	"Hoare" 스타일이 아닙니다. 즉, 신호를 보내고 받는 것은 원자적 작업이 아닙니다.
+	따라서 일반적으로 호출자는 대기가 완료된 후 조건을 다시 확인하고 필요한 경우 다시 대기해야 합니다.
+	주어진 조건 변수는 하나의 LOCK에만 연결되지만, 하나의 LOCK은 여러 개의 조건 변수와 연결될 수 있습니다.
+	즉, LOCK과 조건 변수 사이에는 일대다 매핑이 ​​있습니다.
+	이 함수는 sleep을 사용할 수 있으므로 인터럽트 핸들러 내에서 호출해서는 안 됩니다.
+	인터럽트가 비활성화된 상태에서도 이 함수를 호출할 수 있지만, sleep이 필요한 경우 인터럽트를 다시 활성화해야 합니다. */
+
 void
 cond_wait (struct condition *cond, struct lock *lock) {
 	struct semaphore_elem waiter;
