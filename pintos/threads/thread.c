@@ -245,11 +245,6 @@ thread_block (void) {
 	schedule ();
 }
 
-/* block된 스레드 리스트에 넣는 함수 */
-void insert_sleep(struct thread *t) {
-	list_insert_ordered(&sleep_list, &t->elem, &wakeup_recently, NULL);
-}
-
 /* Transitions a blocked thread T to the ready-to-run state.
    This is an error if T is not blocked.  (Use thread_yield() to
    make the running thread ready.)
@@ -336,6 +331,21 @@ thread_yield (void) {
 	
 	do_schedule (THREAD_READY); // THREAD_READY로 상태 전이
 	intr_set_level (old_level); // 비활성화 이전 원래의 인터럽트 상태 (비활성화 or 활성화)로 돌려둠
+}
+
+/* 스레드 대기 상태로 변경하는 함수 */
+void 
+thread_sleep(int64_t tick) 
+{
+	enum intr_level old_level = intr_disable();
+
+	struct thread* t = thread_current();
+	ASSERT(intr_get_level() == INTR_OFF);  // 현재 인터럽트 상태가 꺼져있는 경우 통과
+
+	t->wakeup_tick = tick;	 // 현재 스레드 구조체 일어나야 할 시간에 일어나야 할 절대시간 대입
+	list_insert_ordered(&sleep_list, &t->elem, &wakeup_recently, NULL); // sleep_list에 삽입
+	thread_block();
+	intr_set_level(old_level);	// 이전 인터럽트 상태로 되돌림
 }
 
 /* Sets the current thread's priority to NEW_PRIORITY. */

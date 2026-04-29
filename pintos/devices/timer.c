@@ -98,20 +98,10 @@ timer_elapsed (int64_t then) {
 /* Suspends execution for approximately TICKS timer ticks. */
 void
 timer_sleep (int64_t ticks) {
-	if (ticks <= 0) // sleep이 필요 없는 경우 리턴
-		return;
-	
 	int64_t start = timer_ticks (); // 현재 ticks start에 저장
 	
-	enum intr_level old_level = intr_disable();
-
-	struct thread *t = thread_current ();
-	ASSERT (intr_get_level () == INTR_OFF); // 현재 인터럽트 상태가 꺼져있는 경우 통과
-
-	t->wakeup_tick = start + ticks; // 현재 스레드 구조체 일어나야 할 시간에 일어나야 할 절대시간 대입
-	insert_sleep(t);
-	thread_block();
-	intr_set_level(old_level); // 이전 인터럽트 상태로 되돌림
+	if (timer_elapsed(start) < ticks) // 여기까지 오는데 tick이 증가했을 수도 있으므로 검증
+		thread_sleep(ticks + start);
 }
 
 /* Suspends execution for approximately MS milliseconds. */
