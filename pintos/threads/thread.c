@@ -69,10 +69,12 @@ static void init_thread (struct thread *, const char *name, int priority);
 static void do_schedule(int status);
 static void schedule (void);
 static tid_t allocate_tid (void);
-static void wakeup(int64_t global_tick);
+void thread_wakeup(int64_t global_tick);
 /* Returns true if T appears to point to a valid thread. */
 #define is_thread(t) ((t) != NULL && (t)->magic == THREAD_MAGIC)
 
+static bool comparison_priority (struct list_elem *a, struct list_elem *b, void *aux);
+static bool comparison_sleep (struct list_elem *a, struct list_elem *b, void *aux);
 /* Returns the running thread.
  * Read the CPU's stack pointer `rsp', and then round that
  * down to the start of a page.  Since `struct thread' is
@@ -144,7 +146,7 @@ thread_start (void) {
 	/* Create the idle thread. */
 	struct semaphore idle_started;
 	sema_init (&idle_started, 0);
-	thread_create ("idle", PRI_MIN, idle, &idle_started);
+	thread_create ("idle", PRI_DEFAULT, idle, &idle_started);
 
 	/* Start preemptive thread scheduling. */
 	intr_enable ();
@@ -210,6 +212,7 @@ thread_create (const char *name, int priority,
 	ASSERT (function != NULL);
 
 	/* Allocate thread. */
+	// 페이지 얼로케이트
 	t = palloc_get_page (PAL_ZERO);
 	if (t == NULL)
 		return TID_ERROR;
@@ -250,8 +253,12 @@ thread_create (const char *name, int priority,
 void
 thread_block (void) {
 	ASSERT (!intr_context ());
+	// 인터럽트 꺼진 상태인지 검증
 	ASSERT (intr_get_level () == INTR_OFF);
+	// 현재 스레드의 status를 Blocked 상태로 변경
 	thread_current ()->status = THREAD_BLOCKED;
+	
+	// 컨텍스트 스위칭이 필요한 상태라 스케쥴링 실행
 	schedule ();
 }
 
@@ -272,13 +279,19 @@ thread_block (void) {
 	다른 데이터를 업데이트할 수 있을 것으로 예상할 수 있습니다. */
 void
 thread_unblock (struct thread *t) {
+	// old_level 추적
 	enum intr_level old_level;
 
 	ASSERT (is_thread (t));
 
 	old_level = intr_disable ();
 	ASSERT (t->status == THREAD_BLOCKED);
-	list_push_back (&ready_list, &t->elem);
+	
+	// 기존 코드 - 뒤로만 보내고 있음
+	// list_push_back (&ready_list, &t->elem);
+	// 개선 코드 - priority 순으로 정렬해서 list에 추가
+	list_insert_ordered(&ready_list, &t->elem, &comparison_priority, NULL);
+
 	t->status = THREAD_READY;
 	intr_set_level (old_level);
 }
@@ -295,7 +308,6 @@ thread_name (void) {
 /* 실행 중인 스레드를 반환합니다.
 	이 함수는 running_thread()에 몇 가지 유효성 검사가 추가된 것입니다.
 	자세한 내용은 thread.h 파일 상단의 주석을 참조하십시오. */
-// thread 구조체 방식으로 읽는 thread_current 함수
 struct thread *
 thread_current (void) {
 	// t가 가리키는 주소에 값을 스레드 주소값을 넣어둠
@@ -372,12 +384,15 @@ thread_yield (void) {
 }
 
 /* Sets the current thread's priority to NEW_PRIORITY. */
+/* 현재 스레드의 우선순위를 NEW_PRIORITY로 설정합니다. */
 void
 thread_set_priority (int new_priority) {
 	thread_current ()->priority = new_priority;
 }
 
 /* Returns the current thread's priority. */
+/* 현재 스레드의 우선순위를 반환합니다. 
+	우선순위 기부가 존재하는 경우에는 더 높은 쪽의 우선순위(기부된 우선순위)를 반환합니다. */
 int
 thread_get_priority (void) {
 	return thread_current ()->priority;
@@ -525,17 +540,26 @@ do_iret (struct intr_frame *tf) {
    It's not safe to call printf() until the thread switch is
    complete.  In practice that means that printf()s should be
    added at the end of the function. */
+
+/* 새 스레드의 페이지 테이블을 활성화하여 스레드를 전환하고,
+	이전 스레드가 종료 중이면 해당 스레드를 소멸시킵니다.
+	이 함수가 호출될 때, 방금 이전 스레드에서 새 스레드로 전환되었고,
+	새 스레드는 이미 실행 중이며, 인터럽트는
+	여전히 비활성화되어 있습니다.
+	스레드 전환이 완료될 때까지 printf()를 호출하는 것은 안전하지 않습니다.
+	실제로 printf()는 함수 끝에 추가해야 합니다. */
+
 static void
 thread_launch (struct thread *th) {
 	uint64_t tf_cur = (uint64_t) &running_thread ()->tf;
 	uint64_t tf = (uint64_t) &th->tf;
 	ASSERT (intr_get_level () == INTR_OFF);
 
-	/* The main switching logic.
-	 * We first restore the whole execution context into the intr_frame
-	 * and then switching to the next thread by calling do_iret.
-	 * Note that, we SHOULD NOT use any stack from here
-	 * until switching is done. */
+	/* 주요 전환 로직.
+	* 먼저 전체 실행 컨텍스트를 intr_frame에 복원합니다.
+	* 그런 다음 do_iret을 호출하여 다음 스레드로 전환합니다.
+	* 전환이 완료될 때까지는 스택을 사용해서는 안 됩니다.
+	*/
 	__asm __volatile (
 			/* Store registers that will be used. */
 			"push %%rax\n"
@@ -594,7 +618,9 @@ thread_launch (struct thread *th) {
 * schedule() 함수 내에서 printf()를 호출하는 것은 안전하지 않습니다. */
 static void
 do_schedule(int status) {
+	// 인터럽트 끈 상태일 때만 허용
 	ASSERT (intr_get_level () == INTR_OFF);
+	// 현재 쓰레드가 런닝상태일 때만 허용
 	ASSERT (thread_current()->status == THREAD_RUNNING);
 	while (!list_empty (&destruction_req)) {
 		struct thread *victim =
@@ -605,11 +631,17 @@ do_schedule(int status) {
 	schedule ();
 }
 
+// 스케줄 함수
 static void
 schedule (void) {
+	// 현재 쓰레드가 block상태이기 때문에, running_thread로 호출
+	// thread_current는 running중인지도 검증하기 때문에 쓸 수 없음.
 	struct thread *curr = running_thread ();
+	// ready_list에 있는 다음 쓰레드 pop으로 가져옴
 	struct thread *next = next_thread_to_run ();
 
+	// 상태 점검
+	// 인터럽트가 종료돼있고, 현재 쓰레드가 런닝이 아니면서,  
 	ASSERT (intr_get_level () == INTR_OFF);
 	ASSERT (curr->status != THREAD_RUNNING);
 	ASSERT (is_thread (next));
@@ -632,6 +664,11 @@ schedule (void) {
 		   currently used by the stack.
 		   The real destruction logic will be called at the beginning of the
 		   schedule(). */
+		/* 전환한 스레드가 종료 중이면 해당 스레드 구조체를 파괴합니다.
+			이 작업은 thread_exit()가 스레드 종료를 막지 않도록 늦게 수행해야 합니다.
+			현재 스택에서 페이지가 사용 중이므로 페이지 해제 요청을 큐에 추가하는 것뿐입니다.
+			실제 파괴 로직은 schedule() 시작 부분에서 호출됩니다. */
+
 		if (curr && curr->status == THREAD_DYING && curr != initial_thread) {
 			ASSERT (curr != next);
 			list_push_back (&destruction_req, &curr->elem);
@@ -639,6 +676,7 @@ schedule (void) {
 
 		/* Before switching the thread, we first save the information
 		 * of current running. */
+		/* 스레드를 전환하기 전에 먼저 현재 실행 중인 스레드의 정보를 저장합니다. */
 		thread_launch (next);
 	}
 }
@@ -661,17 +699,19 @@ allocate_tid (void) {
 //                              const struct list_elem *b,
 //                              void *aux);
 
-// a <-> b 비교함수
-static bool elem_comparison(struct list_elem *a, struct list_elem *b, void *aux) {
-	// TODO 여기에서 aux로 thread, priority 둘 다 받을 수 있게 하면 더 좋을거 같음.
-	
+// a, b sleep_tick 기준 비교함수
+static bool comparison_sleep(struct list_elem *a, struct list_elem *b, void *aux) {
 	struct thread *t_a = list_entry(a, struct thread, elem); 
 	struct thread *t_b = list_entry(b, struct thread, elem);
 
-	if(t_a->sleep_tick == t_b->sleep_tick) 
-		return t_a->sleep_tick > t_b->sleep_tick;
-
 	return t_a->sleep_tick < t_b->sleep_tick;
+}
+// a, b priority 비교함수
+static bool comparison_priority (struct list_elem *a, struct list_elem *b, void *aux) {
+	struct thread *t_a = list_entry(a, struct thread, elem);
+	struct thread *t_b = list_entry(b, struct thread, elem);
+
+	return t_a->priority > t_b->priority;
 }
 
 void thread_sleep (int64_t timer_ticks) {
@@ -684,7 +724,7 @@ void thread_sleep (int64_t timer_ticks) {
 	element->sleep_tick = timer_ticks;
 	
 	// 세 번째 인자값에 들어갈 비교함수가 필요함.
-	list_insert_ordered(&sleep_list, &element->elem, &elem_comparison, NULL);
+	list_insert_ordered(&sleep_list, &element->elem, &comparison_sleep, NULL);
 
 	thread_block();
 }

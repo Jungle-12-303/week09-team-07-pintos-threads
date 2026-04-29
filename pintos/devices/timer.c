@@ -1,7 +1,6 @@
 #include "devices/timer.h"
 #include <debug.h>
 #include <inttypes.h>
-#include <thread.h>
 #include <list.h>
 #include <round.h>
 #include <stdio.h>
@@ -166,7 +165,6 @@ timer_interrupt (struct intr_frame *args UNUSED) {
 
 	thread_tick ();
 
-	// TODO
 	thread_wakeup(ticks);	
 }
 
