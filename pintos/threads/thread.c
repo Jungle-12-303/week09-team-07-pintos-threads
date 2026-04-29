@@ -363,7 +363,6 @@ thread_yield (void) {
 */
 void
 thread_set_priority (int new_priority) {
-	struct list_elem *first_node;
 	struct thread *t;
 
 	thread_current ()->priority = new_priority; // 현재 스레드 priority를 new_priority로 바꾼다.
