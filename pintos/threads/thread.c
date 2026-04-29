@@ -211,6 +211,13 @@ thread_create (const char *name, int priority,
 
 	/* Add to run queue. */
 	thread_unblock (t);
+			
+	
+	/* 우선순위 스케줄링 구현
+	 * 현재 스레드의 우선순위보다 새롭게 생성된 스레드의 우선순위가 높은 경우 교체
+	 */
+	if (t->priority > thread_current()->priority)
+		thread_yield();
 
 	return tid;
 }
@@ -230,6 +237,17 @@ wakeup_recently (const struct list_elem *a,
     return ta->wakeup_tick < tb->wakeup_tick;
 }
 
+/* priority가 가장 높은 순서대로 정렬을 위한 함수 (내림차순) */
+static bool
+higher_priority(const struct list_elem* a,
+				const struct list_elem* b,
+				void* aux UNUSED)
+{
+	struct thread *ta = list_entry (a, struct thread, elem);
+    struct thread *tb = list_entry (b, struct thread, elem);
+
+	return ta->priority > tb->priority; // 우선순위의 값이 클 수록 높은 순위 (동순위는 FIFO)
+}
 
 /* Puts the current thread to sleep.  It will not be scheduled
    again until awoken by thread_unblock().
@@ -261,7 +279,8 @@ thread_unblock (struct thread *t) {
 
 	old_level = intr_disable ();
 	ASSERT (t->status == THREAD_BLOCKED);
-	list_push_back (&ready_list, &t->elem);
+	// ready_list에 우선순위 높은 순서대로 삽입
+	list_insert_ordered(&ready_list, &t->elem, &higher_priority, NULL);
 	t->status = THREAD_READY;
 	intr_set_level (old_level);
 }
@@ -327,7 +346,8 @@ thread_yield (void) {
 
 	/* idle thread는 실행할 다른 스레드가 없을 때만 선택되는 특수 스레드 => ready_list에 들어가서 경쟁하는 스레드 X */
 	if (curr != idle_thread) // 현재 스레드가 idle thread가 아닐 때
-		list_push_back (&ready_list, &curr->elem); // ready_list의 맨 마지막에 스레드를 삽입하여, 스케줄링 후보가 되도록 함
+		list_insert_ordered(&ready_list, &curr->elem, &higher_priority, NULL);
+
 	
 	do_schedule (THREAD_READY); // THREAD_READY로 상태 전이
 	intr_set_level (old_level); // 비활성화 이전 원래의 인터럽트 상태 (비활성화 or 활성화)로 돌려둠
@@ -352,6 +372,14 @@ thread_sleep(int64_t tick)
 void
 thread_set_priority (int new_priority) {
 	thread_current ()->priority = new_priority;
+
+	if (list_empty(&ready_list)) 
+		return;
+
+	struct thread* t = list_entry(list_begin(&ready_list), struct thread, elem);
+
+	if (t->priority > thread_current()->priority)
+		thread_yield();
 }
 
 /* Returns the current thread's priority. */
@@ -646,4 +674,3 @@ void thread_wakeup(int64_t now_ticks) {
 		thread_unblock(t);
 	}
 }
-
