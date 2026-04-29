@@ -136,8 +136,8 @@ static void
 timer_interrupt (struct intr_frame *args UNUSED) {
 	/* 이미 INTR_OFF에서 동작하므로 인터럽트 걱정은 하지 않아도 됨 */
 	ticks++;
+	thread_wakeup(ticks); // @동현남 >> tick 손해 방지를 위해 순서를 바꿔야 할 것 같음
 	thread_tick ();
-	thread_wakeup(ticks);
 }
 
 /* Returns true if LOOPS iterations waits for more than one timer
