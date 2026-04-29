@@ -219,6 +219,11 @@ thread_create (const char *name, int priority,
 	if (t->priority > thread_current()->priority)
 		thread_yield();
 
+	/* 만약 새로 만든 스레드 t가 현재 실행중인 스레드보다 우선순위가 높다면, 현재 스레드가 즉시 CPU를 양보해야 한다. *현재 실행중인 스레드를 중지(yield) */
+	if (t->priority > thread_current()->priority) {
+		thread_yield();
+	}
+
 	return tid;
 }
 
@@ -237,16 +242,15 @@ wakeup_recently (const struct list_elem *a,
     return ta->wakeup_tick < tb->wakeup_tick;
 }
 
-/* priority가 가장 높은 순서대로 정렬을 위한 함수 (내림차순) */
-static bool
-higher_priority(const struct list_elem* a,
-				const struct list_elem* b,
-				void* aux UNUSED)
-{
+/* 우선순위 비교 함수 - thread.c의 ready_list 및 synch.c의 sema waiters 에서 사용 */
+bool 
+thread_priority_compare (const struct list_elem *a, const struct list_elem *b, void *aux UNUSED) {
+	ASSERT (a != NULL && b != NULL);
+
 	struct thread *ta = list_entry (a, struct thread, elem);
     struct thread *tb = list_entry (b, struct thread, elem);
 
-	return ta->priority > tb->priority; // 우선순위의 값이 클 수록 높은 순위 (동순위는 FIFO)
+	return ta->priority > tb->priority;
 }
 
 /* Puts the current thread to sleep.  It will not be scheduled
@@ -279,8 +283,8 @@ thread_unblock (struct thread *t) {
 
 	old_level = intr_disable ();
 	ASSERT (t->status == THREAD_BLOCKED);
-	// ready_list에 우선순위 높은 순서대로 삽입
-	list_insert_ordered(&ready_list, &t->elem, &higher_priority, NULL);
+	// list_push_back (&ready_list, &t->elem); // FIFO
+	list_insert_ordered (&ready_list, &t->elem, thread_priority_compare, NULL); // 현재 스레드 t와 배교해서 올바른 위치에 정렬 삽입
 	t->status = THREAD_READY;
 	intr_set_level (old_level);
 }
@@ -345,41 +349,36 @@ thread_yield (void) {
 	old_level = intr_disable (); // ready_list와 상태 전이를 원자적으로 처리하기 위해 인터럽트 비활성화
 
 	/* idle thread는 실행할 다른 스레드가 없을 때만 선택되는 특수 스레드 => ready_list에 들어가서 경쟁하는 스레드 X */
-	if (curr != idle_thread) // 현재 스레드가 idle thread가 아닐 때
-		list_insert_ordered(&ready_list, &curr->elem, &higher_priority, NULL);
+	if (curr != idle_thread) { // 현재 스레드가 idle thread가 아닐 때
+		list_insert_ordered (&ready_list, &curr->elem, thread_priority_compare, NULL); // ready_list에 정렬 삽입
+	} /* 여기서 thread_priority_compare는 a 스레드의 priority가 b 스레드의 priority보다 높으면 true, 같거나 낮으면 false를 반환하는 함수*/
 
-	
 	do_schedule (THREAD_READY); // THREAD_READY로 상태 전이
 	intr_set_level (old_level); // 비활성화 이전 원래의 인터럽트 상태 (비활성화 or 활성화)로 돌려둠
 }
 
-/* 스레드 대기 상태로 변경하는 함수 */
-void 
-thread_sleep(int64_t tick) 
-{
-	enum intr_level old_level = intr_disable();
 
-	struct thread* t = thread_current();
-	ASSERT(intr_get_level() == INTR_OFF);  // 현재 인터럽트 상태가 꺼져있는 경우 통과
-
-	t->wakeup_tick = tick;	 // 현재 스레드 구조체 일어나야 할 시간에 일어나야 할 절대시간 대입
-	list_insert_ordered(&sleep_list, &t->elem, &wakeup_recently, NULL); // sleep_list에 삽입
-	thread_block();
-	intr_set_level(old_level);	// 이전 인터럽트 상태로 되돌림
-}
-
-/* Sets the current thread's priority to NEW_PRIORITY. */
+/*
+	1. 현재 스레드 priority를 new_priority로 바꾼다.
+	2. ready_list에 현재 스레드보다 더 높은 priority 스레드가 있는지 확인한다.
+	3. 있다면 thread_yield() 한다.
+*/
 void
 thread_set_priority (int new_priority) {
-	thread_current ()->priority = new_priority;
+	struct thread *t;
 
-	if (list_empty(&ready_list)) 
+	thread_current ()->priority = new_priority; // 현재 스레드 priority를 new_priority로 바꾼다.
+	
+	if (list_empty(&ready_list)) {
 		return;
+	}
 
-	struct thread* t = list_entry(list_begin(&ready_list), struct thread, elem);
+	t = list_entry (list_front(&ready_list), struct thread, elem); // 그 list_elem을 포함하는 thread를 꺼낸다.
 
-	if (t->priority > thread_current()->priority)
-		thread_yield();
+	// ready_list에 현재 스레드보다 더 높은 priority 스레드가 있는지 확인한다.
+	if ( t->priority > thread_current ()->priority) {
+		thread_yield(); // 있다면 thread_yield()
+	}
 }
 
 /* Returns the current thread's priority. */
@@ -389,6 +388,7 @@ thread_get_priority (void) {
 }
 
 /* Sets the current thread's nice value to NICE. */
+
 void
 thread_set_nice (int nice UNUSED) {
 	/* TODO: Your implementation goes here */
