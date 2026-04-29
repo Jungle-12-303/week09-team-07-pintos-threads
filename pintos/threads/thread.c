@@ -371,7 +371,6 @@ thread_set_priority (int new_priority) {
 		return;
 	}
 
-	first_node = list_front(&ready_list); // ready_list의 첫 list_elem을 가져온다.
 	t = list_entry (first_node, struct thread, elem); // 그 list_elem을 포함하는 thread를 꺼낸다.
 
 	// ready_list에 현재 스레드보다 더 높은 priority 스레드가 있는지 확인한다.
