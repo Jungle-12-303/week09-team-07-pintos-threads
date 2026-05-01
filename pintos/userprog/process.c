@@ -17,6 +17,7 @@
 #include "threads/thread.h"
 #include "threads/mmu.h"
 #include "threads/vaddr.h"
+#include "devices/timer.h"
 #include "intrinsic.h"
 #ifdef VM
 #include "vm/vm.h"
@@ -204,6 +205,12 @@ process_wait (tid_t child_tid UNUSED) {
 	/* XXX: Hint) The pintos exit if process_wait (initd), we recommend you
 	 * XXX:       to add infinite loop here before
 	 * XXX:       implementing the process_wait. */
+
+	// 커널 main thread가 살아있으면서 일정 시간동안 계속 잠들게 하기 위한 임시 무한루프 코드
+	for (;;) {
+		timer_sleep (100);
+	}
+
 	return -1;
 }
 
