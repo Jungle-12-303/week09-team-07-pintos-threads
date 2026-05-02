@@ -337,6 +337,7 @@ load (const char *file_name, struct intr_frame *if_) {
 	off_t file_ofs;
 	bool success = false;
 	int i;
+	int order_size = strlen(file_name);
 	
 	/* Allocate and activate page directory. */
 	/* 해당 프로세스의 사용자 가상 주소 공간 */
@@ -348,15 +349,16 @@ load (const char *file_name, struct intr_frame *if_) {
 	// file_name 을 파싱하는 함수가 이 단계 이전 어딘가에 들어가야 함.
 	// 토크나이저 사용
 	int64_t argc = 0;		// argv 개수
-	char *argv[MAX_ARGV];		// argv 배열
+	char *tmp_argv[MAX_ARGV];		// argv 배열
 	char * save_ptr = NULL; // file_name의 마지막 주소 보관
 
-	argv[0] = strtok_r(file_name, " ", &save_ptr);
-
+	tmp_argv[0] = strtok_r(file_name, " ", &save_ptr);
+	argc++;
+	
 	/* Open executable file. */
-	file = filesys_open (argv[0]);
+	file = filesys_open (tmp_argv[0]);
 	if (file == NULL) {
-		printf ("load: %s: open failed\n", argv[0]);
+		printf ("load: %s: open failed\n", tmp_argv[0]);
 		goto done;
 	}
 
@@ -435,10 +437,13 @@ load (const char *file_name, struct intr_frame *if_) {
 	/* TODO: Your code goes here.
 	 * TODO: Implement argument passing (see project2/argument_passing.html). */
 	char *token;
+
 	for (token = strtok_r(NULL, " ", &save_ptr); token != NULL; token = strtok_r(NULL, " ", &save_ptr)) {
-		argv[argc] = token;
+		tmp_argv[argc] = token;
 		argc++;
 	}
+	uint8_t padding = (((order_size + 1) +7)/8 * 8) - (order_size + 1);
+
 
 	success = true;
 
