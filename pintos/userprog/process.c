@@ -200,6 +200,14 @@ process_exec (void *f_name) {
  *
  * This function will be implemented in problem 2-2.  For now, it
  * does nothing. */
+/* 스레드 TID가 종료될 때까지 기다렸다가 종료 상태를 반환합니다.
+ * 커널에 의해 종료된 경우(예: 예외로 인해 강제 종료된 경우)
+ * -1을 반환합니다. TID가 유효하지 않거나 호출 프로세스의 자식이 아니거나,
+ * process_wait()가 이미 해당 TID에 대해 성공적으로 호출된 경우,
+ * 대기하지 않고 즉시 -1을 반환합니다.
+ *
+ * 이 함수는 문제 2-2에서 구현될 예정입니다. 현재는
+ * 아무런 동작도 하지 않습니다. */
 int
 process_wait (tid_t child_tid UNUSED) {
 	/* XXX: Hint) The pintos exit if process_wait (initd), we recommend you
@@ -207,10 +215,10 @@ process_wait (tid_t child_tid UNUSED) {
 	 * XXX:       implementing the process_wait. */
 
 	// 커널 main thread가 살아있으면서 일정 시간동안 계속 잠들게 하기 위한 임시 무한루프 코드
-	for (int i = 0; i < 5; i++) {
+	for (int i = 0; i < 30; i++) {
 		timer_sleep (100);
 	}
-		
+
 	return -1;
 }
 
