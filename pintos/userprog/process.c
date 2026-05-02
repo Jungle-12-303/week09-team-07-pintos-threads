@@ -338,6 +338,7 @@ load (const char *file_name, struct intr_frame *if_) {
 	bool success = false;
 	int i;
 	int order_size = strlen(file_name);
+	size_t padding; // word-align
 	
 	/* Allocate and activate page directory. */
 	/* 해당 프로세스의 사용자 가상 주소 공간 */
@@ -442,7 +443,31 @@ load (const char *file_name, struct intr_frame *if_) {
 		tmp_argv[argc] = token;
 		argc++;
 	}
-	uint8_t padding = (((order_size + 1) +7)/8 * 8) - (order_size + 1);
+
+	// word-align 까지 스택에 할당되는 크기
+	int size_until_wa = ROUND_UP (order_size + 1, 8);
+	padding = size_until_wa - (order_size + 1); // 8의 배수로 맞추기 위한 패딩
+
+	// 각 문자열의 주소를 스택에 오른쪽에서 왼쪽 순서로 push합니다.(tmp_arvg 끝부터 역순으로 넣는다.) 
+
+	int stack_ptr = USER_STACK;
+
+	char *argv[argc+1]; // 실제 argv 배열
+
+	// tmp_argv를 역순으로 정렬하여 실제 argv 배열에 넣기
+	for (int i = argc - 1; i >= 0 ; i--) {
+		argv[i] = tmp_argv[argc - i];
+	}
+
+	memcpy();
+
+	
+	if_->rsp -= padding; // 스택 넘버가 감소하는 방향으로 진행되기 때문
+
+	// argv[argc]가 null 포인터가 되도록 넣기
+
+	// 위에서 넣은 argv의 주소값을 8바이트 단위로 스택에 넣기.
+
 
 
 	success = true;
