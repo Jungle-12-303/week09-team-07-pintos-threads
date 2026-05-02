@@ -3,6 +3,8 @@
 
 /* Copies SIZE bytes from SRC to DST, which must not overlap.
    Returns DST. */
+/* SRC에서 DST로 SIZE 바이트를 복사합니다. 복사된 바이트 수는 겹치지 않아야 합니다.
+   DST를 반환합니다. */
 void *
 memcpy (void *dst_, const void *src_, size_t size) {
 	unsigned char *dst = dst_;
@@ -283,7 +285,7 @@ strtok_r (char *s, const char *delimiters, char **save_ptr) {
 		// s 주소 ++
 		s++;
 
-		
+
 	
 	// *s가 \0이 아닐 때
 	if (*s != '\0') {

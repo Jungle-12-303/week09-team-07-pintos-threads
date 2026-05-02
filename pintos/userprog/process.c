@@ -24,7 +24,7 @@
 #endif
 
 static void process_cleanup (void);
-static bool load (const char *file_name, struct intr_frame *if_);
+static bool load (char *file_name, struct intr_frame *if_);
 static void initd (void *f_name);
 static void __do_fork (void *);
 
@@ -330,7 +330,7 @@ static bool load_segment (struct file *file, off_t ofs, uint8_t *upage,
  * and its initial stack pointer into *RSP.
  * Returns true if successful, false otherwise. */
 static bool
-load (const char *file_name, struct intr_frame *if_) {
+load (char *file_name, struct intr_frame *if_) {
 	struct thread *t = thread_current ();
 	struct ELF ehdr;
 	struct file *file = NULL;
@@ -350,11 +350,15 @@ load (const char *file_name, struct intr_frame *if_) {
 	// file_name 을 파싱하는 함수가 이 단계 이전 어딘가에 들어가야 함.
 	// 토크나이저 사용
 	int64_t argc = 0;		// argv 개수
-	char *tmp_argv[MAX_ARGV];		// argv 배열
+	char *tmp_argv[MAX_ARGV]; // 임시 argv 배열
+	char *argv[MAX_ARGV];	// argv 배열
 	char * save_ptr = NULL; // file_name의 마지막 주소 보관
+	char *token;
 
-	tmp_argv[0] = strtok_r(file_name, " ", &save_ptr);
-	argc++;
+	for (token = strtok_r(file_name, " ", &save_ptr); token != NULL; token = strtok_r(NULL, " ", &save_ptr)) {
+		tmp_argv[argc] = token;
+		argc++;
+	}
 	
 	/* Open executable file. */
 	file = filesys_open (tmp_argv[0]);
@@ -437,38 +441,50 @@ load (const char *file_name, struct intr_frame *if_) {
 
 	/* TODO: Your code goes here.
 	 * TODO: Implement argument passing (see project2/argument_passing.html). */
-	char *token;
 
-	for (token = strtok_r(NULL, " ", &save_ptr); token != NULL; token = strtok_r(NULL, " ", &save_ptr)) {
-		tmp_argv[argc] = token;
-		argc++;
+	// 각 문자열의 주소를 스택에 오른쪽에서 왼쪽 순서로 push합니다.(tmp_arvg 끝부터 역순으로 넣는다.) 
+	if_->rsp = USER_STACK;
+
+	// char *argv[argc+1]; // 실제 argv 배열
+	// tmp_argv를 역순으로 정렬하여 실제 argv 배열에 넣기
+	for (int i = argc - 1; i >= 0 ; i--) {
+
+		// 넣을 만큼 빼주어야 함
+		if_->rsp -= strlen(tmp_argv[i])+1;
+
+		// start / end / sizeof
+		memcpy((void *)if_->rsp, tmp_argv[i], strlen(tmp_argv[i])+1);
+
+		// argv[] 에 스택의 주소값 저장
+		argv[i] = if_->rsp;	
+		printf("if_->rsp === %x\n", if_->rsp);
 	}
 
 	// word-align 까지 스택에 할당되는 크기
-	int size_until_wa = ROUND_UP (order_size + 1, 8);
-	padding = size_until_wa - (order_size + 1); // 8의 배수로 맞추기 위한 패딩
-
-	// 각 문자열의 주소를 스택에 오른쪽에서 왼쪽 순서로 push합니다.(tmp_arvg 끝부터 역순으로 넣는다.) 
-
-	int stack_ptr = USER_STACK;
-
-	char *argv[argc+1]; // 실제 argv 배열
-
-	// tmp_argv를 역순으로 정렬하여 실제 argv 배열에 넣기
-	for (int i = argc - 1; i >= 0 ; i--) {
-		argv[i] = tmp_argv[argc - i];
-	}
-
-	memcpy();
-
-	
+	padding = ROUND_UP (order_size + 1, 8) - (order_size + 1); // 8의 배수로 맞추기 위한 패딩 
 	if_->rsp -= padding; // 스택 넘버가 감소하는 방향으로 진행되기 때문
 
 	// argv[argc]가 null 포인터가 되도록 넣기
+	argv[argc] == NULL;
 
 	// 위에서 넣은 argv의 주소값을 8바이트 단위로 스택에 넣기.
+	for (int i = argc; i >= 0 ; i--) {
 
+		// 넣을 만큼 빼주어야 함
+		if_->rsp -= sizeof(argv[i]);
 
+		// 스택에 argv[]의 인자의 주소값 저장
+		memcpy((void *)if_->rsp, &argv[i], sizeof(argv[i]));
+		printf("&argv[i] === %x\n", argv[i]);
+	}
+
+	// %rsi가 argv(argv[0]의 주소)를 가리키게 하고, %rdi에는 argc를 넣습니다.
+	if_->R.rsi = argv;
+	if_->R.rdi = argc;
+
+	// fake address 반환
+	if_->rsp -= sizeof(void *);
+	memcpy(if_->rsp, "0", sizeof(char *));
 
 	success = true;
 
@@ -477,7 +493,6 @@ done:
 	file_close (file);
 	return success;
 }
-
 
 /* Checks whether PHDR describes a valid, loadable segment in
  * FILE and returns true if so, false otherwise. */
