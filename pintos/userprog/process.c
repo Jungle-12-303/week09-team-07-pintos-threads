@@ -207,10 +207,10 @@ process_wait (tid_t child_tid UNUSED) {
 	 * XXX:       implementing the process_wait. */
 
 	// 커널 main thread가 살아있으면서 일정 시간동안 계속 잠들게 하기 위한 임시 무한루프 코드
-	for (;;) {
+	for (int i = 0; i < 5; i++) {
 		timer_sleep (100);
 	}
-
+		
 	return -1;
 }
 
@@ -335,12 +335,18 @@ load (const char *file_name, struct intr_frame *if_) {
 	off_t file_ofs;
 	bool success = false;
 	int i;
+	char * save_ptr = NULL; // file_name의 마지막 주소 보관
 
 	/* Allocate and activate page directory. */
 	t->pml4 = pml4_create ();
 	if (t->pml4 == NULL)
 		goto done;
 	process_activate (thread_current ());
+	// file_name 을 파싱하는 함수가 이 단계 이전 어딘가에 들어가야 함.
+	// 토크나이저 사용
+	int64_t argc = 0;
+	char *argv // 배열로
+	strtok_r (file_name, " ", &save_ptr);
 
 	/* Open executable file. */
 	file = filesys_open (file_name);
