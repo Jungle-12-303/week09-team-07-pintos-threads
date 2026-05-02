@@ -283,6 +283,8 @@ process_activate (struct thread *next) {
 #define PF_W 2          /* Writable. */
 #define PF_R 4          /* Readable. */
 
+#define MAX_ARGV	64		/* 그거 */		
+
 /* Executable header.  See [ELF1] 1-4 to 1-8.
  * This appears at the very beginning of an ELF binary. */
 struct ELF64_hdr {
@@ -344,9 +346,16 @@ load (const char *file_name, struct intr_frame *if_) {
 	process_activate (thread_current ());
 	// file_name 을 파싱하는 함수가 이 단계 이전 어딘가에 들어가야 함.
 	// 토크나이저 사용
-	int64_t argc = 0;
-	char *argv // 배열로
-	strtok_r (file_name, " ", &save_ptr);
+	int64_t argc;		// argv 개수
+	char *argv[MAX_ARGV];		// argv 배열
+
+	// 반복
+	for (;;) {
+		if (strtok_r (file_name, " ", &save_ptr))
+			return;
+
+		//save_ptr이 null이 아닌, str_token이 null이 아닐 때까지 반복
+	}
 
 	/* Open executable file. */
 	file = filesys_open (file_name);
