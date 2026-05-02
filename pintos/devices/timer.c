@@ -227,9 +227,6 @@ real_time_sleep (int64_t num, int32_t denom) {
 		   processes. */
 		// 최소 한번의 틱이 완료 될 때 까지 대기합니다.
 		// 다른 프로세스에게 CPU를 양보하기 위해 timer_sleep을 사용합니다.
-
-		// 이거 매개변수 값 수정해야할거 같은데
-		// ticks가 OS ticks보다 낮은건 당연하잖아
 		timer_sleep (ticks);
 	} else {
 		/* Otherwise, use a busy-wait loop for more accurate

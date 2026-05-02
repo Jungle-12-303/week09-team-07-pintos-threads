@@ -222,6 +222,11 @@ lock_try_acquire (struct lock *lock) {
    An interrupt handler cannot acquire a lock, so it does not
    make sense to try to release a lock within an interrupt
    handler. */
+/* 현재 스레드가 소유해야 하는 LOCK을 해제합니다.
+
+	이것은 lock_release 함수입니다.
+	인터럽트 핸들러는 락을 획득할 수 없으므로,
+	인터럽트 핸들러 내에서 락을 해제하려고 시도하는 것은 의미가 없습니다.*/
 void
 lock_release (struct lock *lock) {
 	ASSERT (lock != NULL);
@@ -250,6 +255,9 @@ struct semaphore_elem {
 /* Initializes condition variable COND.  A condition variable
    allows one piece of code to signal a condition and cooperating
    code to receive the signal and act upon it. */
+/* 조건 변수 COND를 초기화합니다. 조건 변수는
+	하나의 코드가 조건을 알리고, 협력하는
+	코드가 그 신호를 받아 동작할 수 있도록 합니다. */
 void
 cond_init (struct condition *cond) {
 	ASSERT (cond != NULL);
@@ -289,6 +297,7 @@ cond_init (struct condition *cond) {
 	이 함수는 sleep을 사용할 수 있으므로 인터럽트 핸들러 내에서 호출해서는 안 됩니다.
 	인터럽트가 비활성화된 상태에서도 이 함수를 호출할 수 있지만, sleep이 필요한 경우 인터럽트를 다시 활성화해야 합니다. */
 
+// 매개변수 - semaphore_elem
 void
 cond_wait (struct condition *cond, struct lock *lock) {
 	struct semaphore_elem waiter;

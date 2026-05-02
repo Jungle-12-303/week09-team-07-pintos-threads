@@ -58,6 +58,7 @@ process_create_initd (const char *file_name) {
 }
 
 /* A thread function that launches first user process. */
+/* 첫 번째 사용자 프로세스를 실행하는 스레드 함수입니다. */
 static void
 initd (void *f_name) {
 #ifdef VM
@@ -160,26 +161,40 @@ error:
 
 /* Switch the current execution context to the f_name.
  * Returns -1 on fail. */
+/* 현재 실행 컨텍스트를 f_name으로 전환합니다.
+* 실패 시 -1을 반환합니다. */
+// 프로세스 실행 
+// 'ls -al' 이 통째로 들어감.
+// ls / 
+// 'alarm-priority arg1 arg2 arg3'
 int
 process_exec (void *f_name) {
 	char *file_name = f_name;
 	bool success;
 
+	printf("\n\n\n\n f_name : %c \n\n\n\n", (char *)f_name);
+
 	/* We cannot use the intr_frame in the thread structure.
 	 * This is because when current thread rescheduled,
 	 * it stores the execution information to the member. */
+	/* 스레드 구조체에서 intr_frame을 사용할 수 없습니다.
+	 * 현재 스레드가 재스케줄링될 때,
+	 * 실행 정보가 해당 멤버에 저장되기 때문입니다. */
 	struct intr_frame _if;
 	_if.ds = _if.es = _if.ss = SEL_UDSEG;
 	_if.cs = SEL_UCSEG;
 	_if.eflags = FLAG_IF | FLAG_MBS;
 
 	/* We first kill the current context */
+	// 이전 실행중인 컨텍스트 초기화
 	process_cleanup ();
 
 	/* And then load the binary */
+	// 바이너리를 로드합니다.
 	success = load (file_name, &_if);
 
 	/* If load failed, quit. */
+	// 로드 실패시 나감
 	palloc_free_page (file_name);
 	if (!success)
 		return -1;
@@ -248,12 +263,16 @@ process_cleanup (void) {
 
 /* Sets up the CPU for running user code in the nest thread.
  * This function is called on every context switch. */
+/* 다음 스레드에서 사용자 코드를 실행하기 위해 CPU를 설정합니다.
+ * 이 함수는 컨텍스트 스위치가 발생할 때마다 호출됩니다. */
 void
 process_activate (struct thread *next) {
 	/* Activate thread's page tables. */
+	/* 스레드의 페이지 테이블을 활성화합니다. */
 	pml4_activate (next->pml4);
 
 	/* Set thread's kernel stack for use in processing interrupts. */
+	/* 스레드의 커널 스택을 인터럽트 처리에 사용하도록 설정합니다. */
 	tss_update (next);
 }
 
@@ -320,29 +339,49 @@ static bool load_segment (struct file *file, off_t ofs, uint8_t *upage,
  * Stores the executable's entry point into *RIP
  * and its initial stack pointer into *RSP.
  * Returns true if successful, false otherwise. */
+/* FILE_NAME에 있는 ELF 실행 파일을 현재 스레드로 로드합니다.
+* 실행 파일의 진입점을 *RIP에 저장합니다.
+* 초기 스택 포인터를 *RSP에 저장합니다.
+* 성공하면 true, 실패하면 false를 반환합니다. */
+
 static bool
 load (const char *file_name, struct intr_frame *if_) {
+	// 현재 쓰레드 가져옴
 	struct thread *t = thread_current ();
+	// 64비트 방식으로 쓸거라고 선언함. 
+	// 메모리 적재용 변수
 	struct ELF ehdr;
+	// file에 file 주소값을 가져와야 하는데
+	// 파일 inode는 어떻게 구하는지 찾아야 함.
 	struct file *file = NULL;
+	// 파일 내 오프셋. 파일 읽고 있는 위치
 	off_t file_ofs;
+	// 성공 여부
 	bool success = false;
 	int i;
 
 	/* Allocate and activate page directory. */
+	/* 페이지 디렉터리를 할당하고 활성화합니다. */
+	// 64비트 체계 최상위 페이지 테이블
 	t->pml4 = pml4_create ();
 	if (t->pml4 == NULL)
 		goto done;
+	// 컨텍스트 스위칭, active 준비
+	// 다음 스레드의 pml4 가져옴
 	process_activate (thread_current ());
 
 	/* Open executable file. */
+	/* 실행 파일을 엽니다. */
 	file = filesys_open (file_name);
 	if (file == NULL) {
 		printf ("load: %s: open failed\n", file_name);
 		goto done;
 	}
 
+	// printf("file_name : ", );
+
 	/* Read and verify executable header. */
+	/* 실행 파일 헤더를 읽고 확인합니다. */
 	if (file_read (file, &ehdr, sizeof ehdr) != sizeof ehdr
 			|| memcmp (ehdr.e_ident, "\177ELF\2\1\1", 7)
 			|| ehdr.e_type != 2
@@ -355,17 +394,21 @@ load (const char *file_name, struct intr_frame *if_) {
 	}
 
 	/* Read program headers. */
+	/* 프로그램 헤더를 읽습니다. */
 	file_ofs = ehdr.e_phoff;
 	for (i = 0; i < ehdr.e_phnum; i++) {
+		// 프로그램 헤더
 		struct Phdr phdr;
 
+		// 오프셋이 0보다 작거나 / 파일 길이가 더 작거나
 		if (file_ofs < 0 || file_ofs > file_length (file))
 			goto done;
-		file_seek (file, file_ofs);
+		file_seek (file, file_ofs); // FILE 포지션을 new_pos로 설정합니다.
 
 		if (file_read (file, &phdr, sizeof phdr) != sizeof phdr)
 			goto done;
-		file_ofs += sizeof phdr;
+
+		file_ofs += sizeof phdr; // 파일 오프셋 헤더 이후로 변경
 		switch (phdr.p_type) {
 			case PT_NULL:
 			case PT_NOTE:
@@ -378,7 +421,7 @@ load (const char *file_name, struct intr_frame *if_) {
 			case PT_INTERP:
 			case PT_SHLIB:
 				goto done;
-			case PT_LOAD:
+			case PT_LOAD: // 실제 메모리에 올려야 하는 세그먼트
 				if (validate_segment (&phdr, file)) {
 					bool writable = (phdr.p_flags & PF_W) != 0;
 					uint64_t file_page = phdr.p_offset & ~PGMASK;
@@ -408,15 +451,19 @@ load (const char *file_name, struct intr_frame *if_) {
 	}
 
 	/* Set up stack. */
+	/* 스택을 설정합니다. */
 	if (!setup_stack (if_))
 		goto done;
 
 	/* Start address. */
+	/* 시작 주소. */
 	if_->rip = ehdr.e_entry;
 
 	/* TODO: Your code goes here.
 	 * TODO: Implement argument passing (see project2/argument_passing.html). */
-
+	/* TODO: 여기에 코드를 작성하세요.
+	 * TODO: 인자 전달 기능을 구현하세요 (project2/argument_passing.html 참조). */
+	// 
 	success = true;
 
 done:
@@ -428,6 +475,8 @@ done:
 
 /* Checks whether PHDR describes a valid, loadable segment in
  * FILE and returns true if so, false otherwise. */
+/* PHDR이 FILE에 있는 유효하고 로드 가능한 세그먼트를 설명하는지 확인합니다.
+ * 해당하면 true, 그렇지 않으면 false를 반환합니다. */
 static bool
 validate_segment (const struct Phdr *phdr, struct file *file) {
 	/* p_offset and p_vaddr must have the same page offset. */
@@ -492,7 +541,14 @@ static bool install_page (void *upage, void *kpage, bool writable);
  *
  * Return true if successful, false if a memory allocation error
  * or disk read error occurs. */
-static bool
+/* FILE의 주소 UPAGE에서 오프셋 OFS부터 시작하는 세그먼트를 로드합니다.
+ * 총 READ_BYTES + ZERO_BYTES 바이트의 가상 메모리가 다음과 같이 초기화됩니다.
+ * - UPAGE 주소의 READ_BYTES 바이트는 FILE에서 오프셋 OFS부터 읽어야 합니다.
+ * - UPAGE + READ_BYTES 주소의 ZERO_BYTES 바이트는 0으로 초기화해야 합니다.
+ * 이 함수로 초기화된 페이지는 WRITABLE이 true이면 사용자 프로세스에서 쓰기 가능해야 하고, 그렇지 않으면 읽기 전용이어야 합니다.
+ * 성공하면 true를 반환하고, 메모리 할당 오류 또는 디스크 읽기 오류가 발생하면 false를 반환합니다. */
+// 디스크에서 메모리에 올리는 작업
+ static bool
 load_segment (struct file *file, off_t ofs, uint8_t *upage,
 		uint32_t read_bytes, uint32_t zero_bytes, bool writable) {
 	ASSERT ((read_bytes + zero_bytes) % PGSIZE == 0);
@@ -535,6 +591,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 }
 
 /* Create a minimal stack by mapping a zeroed page at the USER_STACK */
+/* USER_STACK에 0으로 채워진 페이지를 매핑하여 최소한의 스택을 생성합니다. */
 static bool
 setup_stack (struct intr_frame *if_) {
 	uint8_t *kpage;

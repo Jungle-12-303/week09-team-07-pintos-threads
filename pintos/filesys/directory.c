@@ -44,6 +44,8 @@ dir_open (struct inode *inode) {
 
 /* Opens the root directory and returns a directory for it.
  * Return true if successful, false on failure. */
+/* 루트 디렉터리를 열고 해당 디렉터리의 하위 디렉터리를 반환합니다.
+ * 성공 시 true, 실패 시 false를 반환합니다. */
 struct dir *
 dir_open_root (void) {
 	return dir_open (inode_open (ROOT_DIR_SECTOR));
@@ -101,6 +103,10 @@ lookup (const struct dir *dir, const char *name,
  * and returns true if one exists, false otherwise.
  * On success, sets *INODE to an inode for the file, otherwise to
  * a null pointer.  The caller must close *INODE. */
+/* DIR에서 지정된 NAME을 가진 파일을 검색합니다.
+ * 파일이 존재하면 true, 그렇지 않으면 false를 반환합니다.
+ * 검색에 성공하면 *INODE에 파일의 inode를 설정하고, 그렇지 않으면
+ * null 포인터를 설정합니다. 호출자는 *INODE를 닫아야 합니다. */
 bool
 dir_lookup (const struct dir *dir, const char *name,
 		struct inode **inode) {

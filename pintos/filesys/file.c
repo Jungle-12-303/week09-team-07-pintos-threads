@@ -7,12 +7,14 @@
 struct file {
 	struct inode *inode;        /* File's inode. */
 	off_t pos;                  /* Current position. */
-	bool deny_write;            /* Has file_deny_write() been called? */
+	bool deny_write;            /* Has file_deny_write() been called? */ /* file_deny_write() 함수가 호출되었습니까? */
 };
 
 /* Opens a file for the given INODE, of which it takes ownership,
  * and returns the new file.  Returns a null pointer if an
  * allocation fails or if INODE is null. */
+/* 주어진 INODE에 대한 파일을 열고 소유권을 가져온 다음, 새 파일을 반환합니다. 
+ * 메모리 할당에 실패하거나 INODE가 null인 경우 null 포인터를 반환합니다. */
 struct file *
 file_open (struct inode *inode) {
 	struct file *file = calloc (1, sizeof *file);
@@ -69,6 +71,11 @@ file_get_inode (struct file *file) {
  * Returns the number of bytes actually read,
  * which may be less than SIZE if end of file is reached.
  * Advances FILE's position by the number of bytes read. */
+/* FILE에서 SIZE 바이트를 읽어 BUFFER에 저장합니다.
+ * 파일의 현재 위치에서 시작합니다.
+ * 실제로 읽은 바이트 수를 반환합니다.
+ * 파일 끝에 도달한 경우 SIZE보다 작을 수 있습니다.
+ * 읽은 바이트 수만큼 FILE의 위치를 ​​이동합니다. */
 off_t
 file_read (struct file *file, void *buffer, off_t size) {
 	off_t bytes_read = inode_read_at (file->inode, buffer, size, file->pos);
@@ -93,6 +100,13 @@ file_read_at (struct file *file, void *buffer, off_t size, off_t file_ofs) {
  * (Normally we'd grow the file in that case, but file growth is
  * not yet implemented.)
  * Advances FILE's position by the number of bytes read. */
+/* 버퍼에서 SIZE 바이트를 파일에 씁니다.
+ * 파일의 현재 위치에서 시작합니다.
+ * 실제로 쓰인 바이트 수를 반환합니다.
+ * 파일 끝에 도달하면 SIZE보다 작을 수 있습니다.
+ * (일반적으로 이 경우 파일 크기를 늘리지만, 파일 크기 증가는
+ * 아직 구현되지 않았습니다.)
+ * 읽은 바이트 수만큼 파일의 위치를 ​​이동시킵니다. */
 off_t
 file_write (struct file *file, const void *buffer, off_t size) {
 	off_t bytes_written = inode_write_at (file->inode, buffer, size, file->pos);
@@ -115,6 +129,8 @@ file_write_at (struct file *file, const void *buffer, off_t size,
 
 /* Prevents write operations on FILE's underlying inode
  * until file_allow_write() is called or FILE is closed. */
+/* file_allow_write() 함수가 호출되거나 
+ * FILE이 닫힐 때까지 FILE의 기본 inode에 대한 쓰기 작업을 방지합니다. */
 void
 file_deny_write (struct file *file) {
 	ASSERT (file != NULL);
@@ -145,6 +161,9 @@ file_length (struct file *file) {
 
 /* Sets the current position in FILE to NEW_POS bytes from the
  * start of the file. */
+/* FILE 포지션을 new_pos로 설정합니다. */
+
+// FILE 포지션을 new_pos로 설정합니다.
 void
 file_seek (struct file *file, off_t new_pos) {
 	ASSERT (file != NULL);

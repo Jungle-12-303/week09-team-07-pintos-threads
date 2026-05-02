@@ -76,8 +76,8 @@
       "last_action": "run"
     },
     "tests/threads/priority-sema": {
-      "count": 2,
-      "last_used": 1777482060.602,
+      "count": 3,
+      "last_used": 1777482656.199,
       "last_action": "run"
     },
     "tests/threads/priority-condvar": {
@@ -88,6 +88,18 @@
     "tests/threads/priority-donate-chain": {
       "count": 2,
       "last_used": 1777482062.992,
+      "last_action": "run"
+    }
+  },
+  "userprog": {
+    "tests/userprog/args-none": {
+      "count": 12,
+      "last_used": 1777651505.138,
+      "last_action": "debug"
+    },
+    "tests/userprog/create-null": {
+      "count": 1,
+      "last_used": 1777545952.201,
       "last_action": "run"
     }
   }

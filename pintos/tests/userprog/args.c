@@ -3,6 +3,11 @@
    done differently for each of the args-* tests based on the
    output. */
 
+/* 명령줄 인수를 출력합니다.
+이 프로그램은 모든 args-* 테스트에 사용됩니다. 채점은
+각 args-* 테스트마다 출력 결과에 따라 다르게 이루어집니다.
+*/
+
 #include "tests/lib.h"
 
 int

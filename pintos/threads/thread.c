@@ -742,6 +742,7 @@ static bool comparison_sleep(struct list_elem *a, struct list_elem *b, void *aux
 
 	return t_a->sleep_tick < t_b->sleep_tick;
 }
+
 // a, b priority 비교함수
 static bool comparison_priority (struct list_elem *a, struct list_elem *b, void *aux) {
 	struct thread *t_a = list_entry(a, struct thread, elem);
@@ -754,6 +755,7 @@ static bool comparison_priority (struct list_elem *a, struct list_elem *b, void 
 void thread_sleep (int64_t timer_ticks) {
 	// TODO
 	// 매개변수로 받아온게 start + ticks니까 어디까지 쉴거냐임
+	
 	// 현재 쓰레드 호출
 	struct thread *element = thread_current();
 
@@ -766,14 +768,12 @@ void thread_sleep (int64_t timer_ticks) {
 	thread_block();
 }
 
-
 // 깨워야 할 스레드 찾기
 void
 thread_wakeup(int64_t global_tick) {
-	// 반복문 시작
-	// 나가는 조건 - 정렬이 돼있고, 가장 앞에 있는(pop) 값의 sleep_ticks가 전역 ticks보다 낮다면.
+	// 리스트가 empty면 애초에 찾을 필요가 없음
 	while (!list_empty(&sleep_list)) {
-		// 여기에서 remove함
+		// 이게 안전한 방법이라고 함.
 		struct list_elem *e = list_pop_front(&sleep_list);
 
 		// pop으로 가져온 t 확인

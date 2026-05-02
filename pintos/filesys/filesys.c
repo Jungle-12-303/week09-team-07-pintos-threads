@@ -57,6 +57,10 @@ filesys_done (void) {
  * Returns true if successful, false otherwise.
  * Fails if a file named NAME already exists,
  * or if internal memory allocation fails. */
+/* 지정된 초기 크기(INITIAL_SIZE)로 NAME이라는 이름의 파일을 생성합니다.
+ * 성공하면 true, 실패하면 false를 반환합니다.
+ * NAME이라는 이름의 파일이 이미 존재하거나,
+ * 내부 메모리 할당에 실패하면 실패합니다. */
 bool
 filesys_create (const char *name, off_t initial_size) {
 	disk_sector_t inode_sector = 0;
@@ -77,6 +81,11 @@ filesys_create (const char *name, off_t initial_size) {
  * otherwise.
  * Fails if no file named NAME exists,
  * or if an internal memory allocation fails. */
+/* 지정된 NAME이라는 이름의 파일을 엽니다.
+ * 성공하면 파일을 반환하고, 그렇지 않으면 null 포인터를 반환합니다.
+ * NAME이라는 이름의 파일이 존재하지 않거나,
+ * 또는 내부 메모리 할당에 실패하면 실패합니다. */
+
 struct file *
 filesys_open (const char *name) {
 	struct dir *dir = dir_open_root ();
@@ -93,6 +102,10 @@ filesys_open (const char *name) {
  * Returns true if successful, false on failure.
  * Fails if no file named NAME exists,
  * or if an internal memory allocation fails. */
+/* NAME이라는 이름의 파일을 삭제합니다.
+ * 성공하면 true, 실패하면 false를 반환합니다.
+ * NAME이라는 이름의 파일이 존재하지 않거나,
+ * 내부 메모리 할당에 실패하면 실패합니다. */
 bool
 filesys_remove (const char *name) {
 	struct dir *dir = dir_open_root ();
