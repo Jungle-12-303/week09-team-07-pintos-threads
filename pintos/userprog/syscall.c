@@ -48,13 +48,14 @@ syscall_handler (struct intr_frame *f) {
 		f->R.rax = f->R.rdx;
 		break;
 		// TODO: 시스템 콜 번호에 따른 추가 구현 필요
+	case SYS_EXIT:
+		thread_current()->exit_status = f->R.rdi;
+		thread_exit ();
+		break;
 	default:
-		// TODO: 예외 처리 필요
+		thread_exit ();
 		break;
 	}
-
-	printf ("system call!\n");
-	thread_exit ();
 }
 
 
