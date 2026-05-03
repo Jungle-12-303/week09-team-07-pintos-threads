@@ -38,8 +38,21 @@ syscall_init (void) {
 }
 
 void
-syscall_handler (struct intr_frame *f UNUSED) {
-	// TODO: Your implementation goes here.
+syscall_handler (struct intr_frame *f) {
+	// x86-64 호출 규약에서 함수 반환값은 RAX 레지스터에 두어야 합니다. 반환값이 있는 시스템 콜은 struct intr_frame의 rax 멤버를 수정해 이를 구현할 수 있습니다.
+
+	switch (f->R.rax)
+	{
+	case SYS_WRITE:
+		putbuf((char *)f->R.rsi, f->R.rdx);
+		f->R.rax = f->R.rdx;
+		break;
+		// TODO: 시스템 콜 번호에 따른 추가 구현 필요
+	default:
+		// TODO: 예외 처리 필요
+		break;
+	}
+
 	printf ("system call!\n");
 	thread_exit ();
 }
