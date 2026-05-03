@@ -200,6 +200,14 @@ process_exec (void *f_name) {
  *
  * This function will be implemented in problem 2-2.  For now, it
  * does nothing. */
+/* 스레드 TID가 종료될 때까지 기다렸다가 종료 상태를 반환합니다.
+ * 커널에 의해 종료된 경우(예: 예외로 인해 강제 종료된 경우)
+ * -1을 반환합니다. TID가 유효하지 않거나 호출 프로세스의 자식이 아니거나,
+ * process_wait()가 이미 해당 TID에 대해 성공적으로 호출된 경우,
+ * 대기하지 않고 즉시 -1을 반환합니다.
+ *
+ * 이 함수는 문제 2-2에서 구현될 예정입니다. 현재는
+ * 아무런 동작도 하지 않습니다. */
 int
 process_wait (tid_t child_tid UNUSED) {
 	/* XXX: Hint) The pintos exit if process_wait (initd), we recommend you
@@ -207,10 +215,10 @@ process_wait (tid_t child_tid UNUSED) {
 	 * XXX:       implementing the process_wait. */
 
 	// 커널 main thread가 살아있으면서 일정 시간동안 계속 잠들게 하기 위한 임시 무한루프 코드
-	for (int i = 0; i < 5; i++) {
+	for (int i = 0; i < 30; i++) {
 		timer_sleep (100);
 	}
-		
+
 	return -1;
 }
 
@@ -351,13 +359,24 @@ load (char *file_name, struct intr_frame *if_) {
 	// 토크나이저 사용
 	int64_t argc = 0;		// argv 개수
 	char *tmp_argv[MAX_ARGV]; // 임시 argv 배열
-	char *argv[MAX_ARGV];	// argv 배열
+	char *argv[MAX_ARGV + 1];	// argv 배열
 	char * save_ptr = NULL; // file_name의 마지막 주소 보관
 	char *token;
 
 	for (token = strtok_r(file_name, " ", &save_ptr); token != NULL; token = strtok_r(NULL, " ", &save_ptr)) {
+		
+		// 메모리 오염 방어 코드
+		if (argc >= MAX_ARGV) { 
+			goto done;
+		}
+
 		tmp_argv[argc] = token;
 		argc++;
+	}
+
+	// filesys_open(tmp_argv[0])에서 초기화되지 않은 값을 쓰는 상황을 막기 위한 방어 코드
+	if (argc == 0) {
+		goto done;
 	}
 	
 	/* Open executable file. */
@@ -444,28 +463,25 @@ load (char *file_name, struct intr_frame *if_) {
 
 	// 각 문자열의 주소를 스택에 오른쪽에서 왼쪽 순서로 push합니다.(tmp_arvg 끝부터 역순으로 넣는다.) 
 	if_->rsp = USER_STACK;
-
-	// char *argv[argc+1]; // 실제 argv 배열
-	// tmp_argv를 역순으로 정렬하여 실제 argv 배열에 넣기
+	
+	// 문자열들을 복사하여 실제 argv 배열에 역순으로 넣기
 	for (int i = argc - 1; i >= 0 ; i--) {
+		size_t len = strlen (tmp_argv[i]) + 1;
 
-		// 넣을 만큼 빼주어야 함
-		if_->rsp -= strlen(tmp_argv[i])+1;
-
-		// start / end / sizeof
-		memcpy((void *)if_->rsp, tmp_argv[i], strlen(tmp_argv[i])+1);
+		if_->rsp -= len; // 넣을 만큼 빼주어야 함
+		memcpy((void *)if_->rsp, tmp_argv[i], len); // start / end / sizeof
 
 		// argv[] 에 스택의 주소값 저장
-		argv[i] = if_->rsp;	
-		printf("if_->rsp === %x\n", if_->rsp);
+		argv[i] = (char *)if_->rsp;	
+		// printf("if_->rsp === %x\n", if_->rsp); // debug
 	}
 
-	// word-align 까지 스택에 할당되는 크기
-	padding = ROUND_UP (order_size + 1, 8) - (order_size + 1); // 8의 배수로 맞추기 위한 패딩 
+	// padding으로 rsp를 8바이트 정렬
+	padding = if_->rsp % 8; // 8의 배수로 맞추기 위한 패딩 
 	if_->rsp -= padding; // 스택 넘버가 감소하는 방향으로 진행되기 때문
 
-	// argv[argc]가 null 포인터가 되도록 넣기
-	argv[argc] == NULL;
+	// NULL sentinel: argv[argc]가 null 포인터가 되도록 넣기
+	argv[argc] = NULL;
 
 	// 위에서 넣은 argv의 주소값을 8바이트 단위로 스택에 넣기.
 	for (int i = argc; i >= 0 ; i--) {
@@ -475,16 +491,17 @@ load (char *file_name, struct intr_frame *if_) {
 
 		// 스택에 argv[]의 인자의 주소값 저장
 		memcpy((void *)if_->rsp, &argv[i], sizeof(argv[i]));
-		printf("&argv[i] === %x\n", argv[i]);
+		// printf("&argv[i] === %x\n", argv[i]); // debug
 	}
 
 	// %rsi가 argv(argv[0]의 주소)를 가리키게 하고, %rdi에는 argc를 넣습니다.
-	if_->R.rsi = argv;
+	if_->R.rsi = if_->rsp;
 	if_->R.rdi = argc;
 
-	// fake address 반환
-	if_->rsp -= sizeof(void *);
-	memcpy(if_->rsp, "0", sizeof(char *));
+	// fake address 반환 - 문자열 "0"이 아닌 8바이트짜리 NULL 값을 넣어야 함.
+	void *fake_ret = NULL;
+	if_->rsp -= sizeof(fake_ret);
+	memcpy((void *)if_->rsp, &fake_ret, sizeof(fake_ret));
 
 	success = true;
 
