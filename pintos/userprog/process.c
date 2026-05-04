@@ -13,6 +13,7 @@
 #include "threads/flags.h"
 #include "threads/init.h"
 #include "threads/interrupt.h"
+#include "threads/malloc.h"
 #include "threads/palloc.h"
 #include "threads/thread.h"
 #include "threads/mmu.h"
@@ -28,10 +29,178 @@ static bool load (char *file_name, struct intr_frame *if_);
 static void initd (void *f_name);
 static void __do_fork (void *);
 
+struct fd_entry {
+	int fd;
+	struct file *file;
+	struct list_elem elem;
+};
+
+static bool process_list_initialized (struct list *list);
+static struct fd_entry *process_find_fd_entry (struct thread *t, int fd);
+static void process_close_files (struct thread *t);
+
 /* General process initializer for initd and other process. */
 static void
 process_init (void) {
 	struct thread *current = thread_current ();
+	process_user_init (current);
+}
+
+void
+process_user_init (struct thread *t) {
+	ASSERT (t != NULL);
+
+	if (!process_list_initialized (&t->fd_table))
+		list_init (&t->fd_table);
+	if (!process_list_initialized (&t->children))
+		list_init (&t->children);
+	if (t->next_fd < 2)
+		t->next_fd = 2;
+}
+
+static bool
+process_list_initialized (struct list *list) {
+	return list->head.next != NULL && list->tail.prev != NULL;
+}
+
+int
+process_add_file (struct file *file) {
+	struct thread *cur = thread_current ();
+	struct fd_entry *entry;
+
+	if (file == NULL)
+		return -1;
+
+	process_user_init (cur);
+	entry = malloc (sizeof *entry);
+	if (entry == NULL)
+		return -1;
+
+	entry->fd = cur->next_fd++;
+	entry->file = file;
+	list_push_back (&cur->fd_table, &entry->elem);
+	return entry->fd;
+}
+
+static struct fd_entry *
+process_find_fd_entry (struct thread *t, int fd) {
+	struct list_elem *e;
+
+	if (t == NULL || !process_list_initialized (&t->fd_table))
+		return NULL;
+
+	for (e = list_begin (&t->fd_table); e != list_end (&t->fd_table);
+			e = list_next (e)) {
+		struct fd_entry *entry = list_entry (e, struct fd_entry, elem);
+		if (entry->fd == fd)
+			return entry;
+	}
+	return NULL;
+}
+
+struct file *
+process_get_file (int fd) {
+	struct fd_entry *entry = process_find_fd_entry (thread_current (), fd);
+	return entry != NULL ? entry->file : NULL;
+}
+
+bool
+process_close_file (int fd) {
+	struct fd_entry *entry = process_find_fd_entry (thread_current (), fd);
+
+	if (entry == NULL)
+		return false;
+
+	list_remove (&entry->elem);
+	file_close (entry->file);
+	free (entry);
+	return true;
+}
+
+void
+process_close_all_files (void) {
+	process_close_files (thread_current ());
+}
+
+static void
+process_close_files (struct thread *t) {
+	if (t == NULL || !process_list_initialized (&t->fd_table))
+		return;
+
+	while (!list_empty (&t->fd_table)) {
+		struct list_elem *e = list_pop_front (&t->fd_table);
+		struct fd_entry *entry = list_entry (e, struct fd_entry, elem);
+		file_close (entry->file);
+		free (entry);
+	}
+}
+
+bool
+process_duplicate_fds (struct thread *dst, struct thread *src) {
+	struct list_elem *e;
+
+	ASSERT (dst != NULL);
+	ASSERT (src != NULL);
+
+	process_user_init (dst);
+	if (!process_list_initialized (&src->fd_table))
+		return true;
+
+	dst->next_fd = src->next_fd;
+	for (e = list_begin (&src->fd_table); e != list_end (&src->fd_table);
+			e = list_next (e)) {
+		struct fd_entry *src_entry = list_entry (e, struct fd_entry, elem);
+		struct fd_entry *dst_entry = malloc (sizeof *dst_entry);
+		if (dst_entry == NULL)
+			goto fail;
+
+		dst_entry->fd = src_entry->fd;
+		dst_entry->file = file_duplicate (src_entry->file);
+		if (dst_entry->file == NULL) {
+			free (dst_entry);
+			goto fail;
+		}
+		list_push_back (&dst->fd_table, &dst_entry->elem);
+	}
+	return true;
+
+fail:
+	process_close_files (dst);
+	return false;
+}
+
+struct child_status *
+process_find_child (tid_t tid) {
+	struct thread *cur = thread_current ();
+	struct list_elem *e;
+
+	if (!process_list_initialized (&cur->children))
+		return NULL;
+
+	for (e = list_begin (&cur->children); e != list_end (&cur->children);
+			e = list_next (e)) {
+		struct child_status *cs = list_entry (e, struct child_status, elem);
+		if (cs->tid == tid)
+			return cs;
+	}
+	return NULL;
+}
+
+void
+child_status_release (struct child_status *cs) {
+	if (cs == NULL)
+		return;
+
+	cs->ref_cnt--;
+	if (cs->ref_cnt <= 0)
+		free (cs);
+}
+
+void
+process_exit_with_status (int status) {
+	thread_current ()->exit_status = status;
+	thread_exit ();
+	NOT_REACHED ();
 }
 
 /* Starts the first userland program, called "initd", loaded from FILE_NAME.
@@ -245,6 +414,12 @@ void
 process_exit (void) {
 	struct thread *curr = thread_current ();
 	printf ("%s: exit(%d)\n", curr->name, curr->exit_status); 
+	process_close_all_files ();
+	if (curr->exec_file != NULL) {
+		file_allow_write (curr->exec_file);
+		file_close (curr->exec_file);
+		curr->exec_file = NULL;
+	}
 	process_cleanup ();
 }
 
