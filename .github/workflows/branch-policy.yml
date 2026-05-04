@@ -62,6 +62,7 @@ jobs:
               legendLEE98: ['kdh949', 'HyungminYoon1'],
               HyungminYoon1: ['kdh949', 'legendLEE98'],
             };
+            const sharedDevBranchPrefixes = ['practice/', 'codex/'];
 
             function policyForDevPullRequest(headBranch, prAuthor) {
               const personalBranchPolicy = branchPolicy[headBranch];
@@ -69,12 +70,13 @@ jobs:
                 return personalBranchPolicy;
               }
 
-              // Poka-yoke: shared practice branches still require every non-author teammate approval.
-              if (headBranch.startsWith('practice/')) {
+              // Poka-yoke: shared work branches still require every non-author teammate approval.
+              if (sharedDevBranchPrefixes.some((prefix) => headBranch.startsWith(prefix))) {
                 const reviewers = teamReviewersByAuthor[prAuthor];
                 if (!reviewers) {
                   fail(
-                    `practice/* -> dev pull requests must be opened by one of: ` +
+                    `${sharedDevBranchPrefixes.map((prefix) => `${prefix}*`).join(', ')} -> dev pull requests ` +
+                    `must be opened by one of: ` +
                     `${Object.keys(teamReviewersByAuthor).join(', ')}. Current author: ${prAuthor}.`
                   );
                 }
@@ -165,7 +167,11 @@ jobs:
 
               const policy = policyForDevPullRequest(headBranch, prAuthor);
               if (!policy) {
-                fail(`Only donghyun, changwon, hyungmin, or practice/* branches may target dev. Current head branch: ${headBranch}.`);
+                fail(
+                  `Only donghyun, changwon, hyungmin, or ` +
+                  `${sharedDevBranchPrefixes.map((prefix) => `${prefix}*`).join(', ')} branches may target dev. ` +
+                  `Current head branch: ${headBranch}.`
+                );
               }
 
               if (prAuthor !== policy.author) {
