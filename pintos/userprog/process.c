@@ -269,33 +269,21 @@ initd (void *f_name) {
 
 /* Clones the current process as `name`. Returns the new process's thread id, or
  * TID_ERROR if the thread cannot be created. */
-
- /*
-	아래의 내용을 반영해야 함.
-
-	1. process_fork()에서 parent intr_frame을 child에게 넘길 수 있게 aux 구조체 준비
-	2. child_status 생성 및 children list 연결
-	3. thread_create()에 parent thread만 넘기는 대신 aux 구조체 넘기기
-	4. parent는 child가 복제 성공/실패를 알릴 때까지 기다리기
-	5. __do_fork()에서 aux를 받아 intr_frame 복사
-	6. child 쪽 if_.R.rax = 0 설정
- */
 tid_t
 process_fork (const char *name, struct intr_frame *if_) {
-	/* Clone current thread to new thread.*/
-	tid_t tid;
-	struct fork_aux *aux = malloc (sizeof *aux); // aux 구조체 할당
-
+	/* process_fork()에서 parent intr_frame을 child에게 넘길 수 있게 aux 구조체 할당.*/
+	struct fork_aux *aux = malloc (sizeof *aux);
 	if (aux == NULL) {
 		return TID_ERROR;
 	}
 
 	aux->parent = thread_current (); // parent 저장
 
+	/* 부모의 syscall 진입 시점 레지스터 상태를 자식에게 넘기기 위해 aux에 복사한다. */
 	memcpy (&aux->parent_if, if_, sizeof *if_); // parent intr_frame 복사
 
-	tid = thread_create (name, PRI_DEFAULT, __do_fork, aux); // thread_create에 aux 전달
-
+	/* thread_create에 parent thread 대신 aux 전달. __do_fork()에서는 aux를 받아 intr_frame 복사 */
+	tid_t tid = thread_create (name, PRI_DEFAULT, __do_fork, aux);
 	if (tid == TID_ERROR) {
 		free(aux);
 		return TID_ERROR;
@@ -316,22 +304,36 @@ duplicate_pte (uint64_t *pte, void *va, void *aux) {
 	bool writable;
 
 	/* 1. TODO: If the parent_page is kernel page, then return immediately. */
+	if (is_kern_pte (pte)) {
+		return true;
+	}
 
 	/* 2. Resolve VA from the parent's page map level 4. */
 	parent_page = pml4_get_page (parent->pml4, va);
+	if (parent_page == NULL) {
+		return false;
+	}
 
-	/* 3. TODO: Allocate new PAL_USER page for the child and set result to
-	 *    TODO: NEWPAGE. */
+	/* 3. Allocate new PAL_USER page for the child and set result to NEWPAGE. */
+	newpage = palloc_get_page (PAL_USER);
+	if (newpage == NULL) {
+		return false;
+	}
 
-	/* 4. TODO: Duplicate parent's page to the new page and
-	 *    TODO: check whether parent's page is writable or not (set WRITABLE
-	 *    TODO: according to the result). */
+	/* 4. Duplicate parent's page to the new page and
+	 *    check whether parent's page is writable or not (set WRITABLE
+	 *    according to the result). */
+	memcpy (newpage, parent_page, PGSIZE);
 
 	/* 5. Add new page to child's page table at address VA with WRITABLE
 	 *    permission. */
+	writable = is_writable (pte);
 	if (!pml4_set_page (current->pml4, va, newpage, writable)) {
-		/* 6. TODO: if fail to insert page, do error handling. */
+		/* 6. if fail to insert page, do error handling. */
+		palloc_free_page (newpage);
+		return false;
 	}
+
 	return true;
 }
 #endif
@@ -342,7 +344,7 @@ duplicate_pte (uint64_t *pte, void *va, void *aux) {
  *       this function. */
 
 /* __do_fork()가 thread_current()만 받은 것이 아니라,
-	process_fork()에서 만든 struct fork_aux를 받는 함수로 바뀌어야 함.
+   process_fork()에서 만든 struct fork_aux를 받는 함수로 바뀌어야 함.
 */
 static void
 __do_fork (void *aux) {
