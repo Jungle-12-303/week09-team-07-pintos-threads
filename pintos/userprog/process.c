@@ -42,8 +42,8 @@ process_init (void) {
 tid_t
 process_create_initd (const char *file_name) {
 	char *fn_copy;
-	char *copied_file_name;
 	char *thread_name;
+	char *space;
 	tid_t tid;
 
 	/* Make a copy of FILE_NAME.
@@ -55,17 +55,22 @@ process_create_initd (const char *file_name) {
 		return TID_ERROR;
 	strlcpy (fn_copy, file_name, PGSIZE);
 
-	copied_file_name = palloc_get_page (0);
-	// copied_file_name에 입력 값 복사시켜두기
-	strlcpy(copied_file_name, file_name, PGSIZE);
+	thread_name = palloc_get_page (0);
+	if (thread_name == NULL) {
+		palloc_free_page(fn_copy);
+		return TID_ERROR;
+	}
+		
+	strlcpy (thread_name, file_name, PGSIZE);
 
 	// copied_file_name의 첫 번째 인자만 추출하기
-	thread_name = strtok_r(copied_file_name, " ", &thread_name);
+	space = strchr(thread_name, ' ');
+	if (space != NULL) {
+		*space = '\0';
+	}
 
 	/* Create a new thread to execute FILE_NAME. */
 	tid = thread_create (thread_name, PRI_DEFAULT, initd, fn_copy);
-
-	palloc_free_page (copied_file_name);
 	if (tid == TID_ERROR)
 		palloc_free_page (fn_copy);
 	return tid;
