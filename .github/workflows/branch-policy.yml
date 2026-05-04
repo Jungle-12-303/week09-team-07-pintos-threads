@@ -121,7 +121,11 @@ jobs:
 
             try {
               if (context.eventName === 'workflow_dispatch') {
-                const prNumberInput = core.getInput('pr_number', { required: true });
+                const prNumberInput = context.payload.inputs?.pr_number;
+                if (!prNumberInput) {
+                  fail('workflow_dispatch requires pr_number input.');
+                }
+
                 const prNumber = Number.parseInt(prNumberInput, 10);
                 if (!Number.isInteger(prNumber) || prNumber <= 0) {
                   fail(`pr_number must be a positive integer. Current value: ${prNumberInput}.`);
