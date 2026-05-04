@@ -357,6 +357,21 @@ thread_yield (void) {
 	intr_set_level (old_level); // 비활성화 이전 원래의 인터럽트 상태 (비활성화 or 활성화)로 돌려둠
 }
 
+/* 스레드 대기 상태로 변경하는 함수 */
+void
+thread_sleep (int64_t tick)
+{
+	enum intr_level old_level = intr_disable ();
+
+	struct thread *t = thread_current ();
+	ASSERT (intr_get_level () == INTR_OFF); // 현재 인터럽트 상태가 꺼져있는 경우 통과
+
+	t->wakeup_tick = tick; // 현재 스레드 구조체 일어나야 할 시간에 일어나야 할 절대시간 대입
+	list_insert_ordered (&sleep_list, &t->elem, &wakeup_recently, NULL); // sleep_list에 삽입
+	thread_block ();
+	intr_set_level (old_level); // 이전 인터럽트 상태로 되돌림
+}
+
 
 /*
 	1. 현재 스레드 priority를 new_priority로 바꾼다.
