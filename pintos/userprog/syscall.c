@@ -147,9 +147,8 @@ syscall_handler (struct intr_frame *f) {
 	case SYS_CREATE:// TODO: A                 /* Create a file. */
 		// 값 들어 오는 것 확인
 		// rdi로 제목 데이터 / rsi로 길이 데이터 들어옴.
-		bool success = filesys_create((char *)f->R.rdi, f->R.rsi);
-		if (!success) { // 생성 실패 시 예외 처리
-			f->R.rax = 0;
+		if (!filesys_create((char *)f->R.rdi, f->R.rsi)) {
+			f->R.rax = 0; // 예외처리
 		}
 		break;
 	case SYS_REMOVE:// TODO: A                 /* Delete a file. */
