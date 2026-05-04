@@ -42,17 +42,30 @@ process_init (void) {
 tid_t
 process_create_initd (const char *file_name) {
 	char *fn_copy;
+	char *copied_file_name;
+	char *thread_name;
 	tid_t tid;
 
 	/* Make a copy of FILE_NAME.
 	 * Otherwise there's a race between the caller and load(). */
+	/* FILE_NAME의 복사본을 만드세요.
+	 * 그렇지 않으면 호출자와 load() 함수 사이에 경쟁 조건이 발생합니다. */
 	fn_copy = palloc_get_page (0);
 	if (fn_copy == NULL)
 		return TID_ERROR;
 	strlcpy (fn_copy, file_name, PGSIZE);
 
+	copied_file_name = palloc_get_page (0);
+	// copied_file_name에 입력 값 복사시켜두기
+	strlcpy(copied_file_name, file_name, PGSIZE);
+
+	// copied_file_name의 첫 번째 인자만 추출하기
+	thread_name = strtok_r(copied_file_name, " ", &thread_name);
+
 	/* Create a new thread to execute FILE_NAME. */
-	tid = thread_create (file_name, PRI_DEFAULT, initd, fn_copy);
+	tid = thread_create (thread_name, PRI_DEFAULT, initd, fn_copy);
+
+	palloc_free_page (copied_file_name);
 	if (tid == TID_ERROR)
 		palloc_free_page (fn_copy);
 	return tid;
@@ -371,6 +384,7 @@ load (char *file_name, struct intr_frame *if_) {
 	}
 
 	// filesys_open(tmp_argv[0])에서 초기화되지 않은 값을 쓰는 상황을 막기 위한 방어 코드
+	
 	if (argc == 0) {
 		goto done;
 	}
