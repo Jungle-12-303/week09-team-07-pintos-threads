@@ -81,6 +81,7 @@ console_print_stats (void) {
 }
 
 /* Acquires the console lock. */
+/* 콘솔 잠금을 획득합니다. */
 	static void
 acquire_console (void) {
 	if (!intr_context () && use_console_lock) {
@@ -139,6 +140,7 @@ puts (const char *s) {
 }
 
 /* Writes the N characters in BUFFER to the console. */
+/* 버퍼에 저장된 N개의 문자를 콘솔에 출력합니다. */
 void
 putbuf (const char *buffer, size_t n) {
 	acquire_console ();
@@ -148,6 +150,7 @@ putbuf (const char *buffer, size_t n) {
 }
 
 /* Writes C to the vga display and serial port. */
+/* C 문자를 VGA 디스플레이와 시리얼 포트로 출력합니다. */
 int
 putchar (int c) {
 	acquire_console ();
@@ -168,6 +171,8 @@ vprintf_helper (char c, void *char_cnt_) {
 /* Writes C to the vga display and serial port.
    The caller has already acquired the console lock if
    appropriate. */
+/* VGA 디스플레이와 시리얼 포트에 C 문자를 출력합니다.
+   호출자는 이미 콘솔 잠금을 획득한 상태입니다. */
 static void
 putchar_have_lock (uint8_t c) {
 	ASSERT (console_locked_by_current_thread ());

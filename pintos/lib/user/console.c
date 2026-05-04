@@ -5,12 +5,15 @@
 
 /* The standard vprintf() function,
    which is like printf() but uses a va_list. */
+/* 표준 vprintf() 함수입니다.
+   printf() 함수와 유사하지만 va_list를 사용합니다. */
 int
 vprintf (const char *format, va_list args) {
 	return vhprintf (STDOUT_FILENO, format, args);
 }
 
 /* Like printf(), but writes output to the given HANDLE. */
+/* printf()와 유사하지만, 지정된 핸들에 출력을 씁니다. */
 int
 hprintf (int handle, const char *format, ...) {
 	va_list args;
@@ -25,6 +28,7 @@ hprintf (int handle, const char *format, ...) {
 
 /* Writes string S to the console, followed by a new-line
    character. */
+/* 문자열 S를 콘솔에 출력하고 그 뒤에 줄 바꿈 문자를 추가합니다. */
 int
 puts (const char *s) {
 	write (STDOUT_FILENO, s, strlen (s));
@@ -42,6 +46,7 @@ putchar (int c) {
 }
 
 /* Auxiliary data for vhprintf_helper(). */
+/* vhprintf_helper() 함수에 필요한 보조 데이터입니다. */
 struct vhprintf_aux {
 	char buf[64];       /* Character buffer. */
 	char *p;            /* Current position in buffer. */
@@ -55,6 +60,8 @@ static void flush (struct vhprintf_aux *);
 /* Formats the printf() format specification FORMAT with
    arguments given in ARGS and writes the output to the given
    HANDLE. */
+/* printf() 형식 지정자 FORMAT을 ARGS에 지정된 인수로 포맷하고,
+   지정된 HANDLE에 출력을 씁니다. */
 int
 vhprintf (int handle, const char *format, va_list args) {
 	struct vhprintf_aux aux;
@@ -68,6 +75,7 @@ vhprintf (int handle, const char *format, va_list args) {
 
 /* Adds C to the buffer in AUX, flushing it if the buffer fills
    up. */
+/* AUX 버퍼에 C를 추가하고, 버퍼가 가득 차면 버퍼를 비웁니다. */
 static void
 add_char (char c, void *aux_) {
 	struct vhprintf_aux *aux = aux_;

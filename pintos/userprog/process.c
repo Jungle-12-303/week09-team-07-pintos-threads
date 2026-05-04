@@ -413,7 +413,7 @@ process_wait (tid_t child_tid UNUSED) {
 void
 process_exit (void) {
 	struct thread *curr = thread_current ();
-	printf ("%s: exit(%d)\n", curr->name, curr->exit_status); 
+	printf ("%s: exit(%d)\n", curr->name, curr->exit_status); // (int)curr->R->rax
 	process_close_all_files ();
 	if (curr->exec_file != NULL) {
 		file_allow_write (curr->exec_file);

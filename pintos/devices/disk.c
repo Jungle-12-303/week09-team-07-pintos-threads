@@ -97,6 +97,7 @@ static void select_device_wait (const struct disk *);
 static void interrupt_handler (struct intr_frame *);
 
 /* Initialize the disk subsystem and detect disks. */
+/* 디스크 하위 시스템을 초기화하고 디스크를 감지합니다. */
 void
 disk_init (void) {
 	size_t chan_no;
@@ -157,6 +158,7 @@ disk_init (void) {
 }
 
 /* Prints disk statistics. */
+/* 디스크 통계를 출력합니다. */
 void
 disk_print_stats (void) {
 	int chan_no;
@@ -182,6 +184,13 @@ disk_print_stats (void) {
 1:0 - scratch
 1:1 - swap
 */
+/* CHAN_NO로 지정된 채널 내에서 DEV_NO로 지정된 디스크(마스터는 0, 슬레이브는 1)를 반환합니다.
+   Pintos는 디스크를 다음과 같이 사용합니다.
+0:0 - 부트 로더, 명령줄 인수 및 운영 체제 커널
+0:1 - 파일 시스템
+1:0 - 스크래치
+1:1 - 스왑
+*/
 struct disk *
 disk_get (int chan_no, int dev_no) {
 	ASSERT (dev_no == 0 || dev_no == 1);
@@ -196,6 +205,8 @@ disk_get (int chan_no, int dev_no) {
 
 /* Returns the size of disk D, measured in DISK_SECTOR_SIZE-byte
    sectors. */
+/* 디스크 D의 크기를 DISK_SECTOR_SIZE-바이트 단위로 반환합니다.
+   섹터 수입니다. */
 disk_sector_t
 disk_size (struct disk *d) {
 	ASSERT (d != NULL);
@@ -207,6 +218,8 @@ disk_size (struct disk *d) {
    room for DISK_SECTOR_SIZE bytes.
    Internally synchronizes accesses to disks, so external
    per-disk locking is unneeded. */
+/* 디스크 D에서 SEC_NO번 섹터를 읽어 BUFFER에 저장합니다. BUFFER에는 DISK_SECTOR_SIZE 바이트만큼의 공간이 있어야 합니다.
+   내부적으로 디스크 접근을 동기화하므로 외부 디스크별 잠금은 필요하지 않습니다. */
 void
 disk_read (struct disk *d, disk_sector_t sec_no, void *buffer) {
 	struct channel *c;
@@ -231,6 +244,9 @@ disk_read (struct disk *d, disk_sector_t sec_no, void *buffer) {
    acknowledged receiving the data.
    Internally synchronizes accesses to disks, so external
    per-disk locking is unneeded. */
+/* BUFFER에 있는 SEC_NO 섹터의 데이터를 디스크 D에 기록합니다. BUFFER는 DISK_SECTOR_SIZE 바이트의 용량을 가져야 합니다.
+   디스크가 데이터 수신을 확인한 후 반환합니다.
+   내부적으로 디스크 접근을 동기화하므로 외부 디스크별 잠금은 필요하지 않습니다. */
 void
 disk_write (struct disk *d, disk_sector_t sec_no, const void *buffer) {
 	struct channel *c;
@@ -250,12 +266,14 @@ disk_write (struct disk *d, disk_sector_t sec_no, const void *buffer) {
 	lock_release (&c->lock);
 }
 
-/* Disk detection and identification. */
 
+/* Disk detection and identification. */
+/* 디스크 감지 및 식별. */
 static void print_ata_string (char *string, size_t size);
 
 /* Resets an ATA channel and waits for any devices present on it
    to finish the reset. */
+/* ATA 채널을 재설정하고 해당 채널에 연결된 장치가 재설정을 완료할 때까지 기다립니다. */
 static void
 reset_channel (struct channel *c) {
 	bool present[2];

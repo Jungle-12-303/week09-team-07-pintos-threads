@@ -131,7 +131,12 @@ syscall_handler (struct intr_frame *f) {
 		putbuf((char *)f->R.rsi, f->R.rdx);
 		f->R.rax = f->R.rdx;
 		break;
-		// TODO: 시스템 콜 번호에 따른 추가 구현 필요
+	// TODO: 시스템 콜 번호에 따른 추가 구현 필요
+	case SYS_CREATE:
+		// 값 들어 오는 것 확인
+		// rdi로 데이터 들어옴
+		filesys_create((char *)f->R.rdi, f->R.rsi);
+		break;
 	case SYS_EXIT:
 		thread_current()->exit_status = f->R.rdi;
 		thread_exit ();
