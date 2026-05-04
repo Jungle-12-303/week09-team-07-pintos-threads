@@ -9,6 +9,11 @@
 #include "vm/vm.h"
 #endif
 
+#ifdef USERPROG
+struct child_status;
+struct file;
+#endif
+
 void thread_wakeup(int64_t now_ticks); // sleep_list 순회 후 기다릴 시간이 지난 스레드 깨우는 함수
 
 /* States in a thread's life cycle. */
@@ -127,6 +132,11 @@ struct thread {
 	/* Owned by userprog/process.c. */
 	uint64_t *pml4;                     /* Page map level 4 */
 	int exit_status;
+	struct list fd_table;              /* Per-process file descriptors. */
+	int next_fd;                       /* Next fd number for regular files. */
+	struct list children;              /* Direct child process states. */
+	struct child_status *child_info;   /* State shared with this process's parent. */
+	struct file *exec_file;            /* Executable kept open for write denial. */
 #endif
 #ifdef VM
 	/* Table for whole virtual memory owned by thread. */
