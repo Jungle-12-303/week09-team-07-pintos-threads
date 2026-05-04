@@ -17,13 +17,14 @@
 #include "threads/thread.h"
 #include "threads/mmu.h"
 #include "threads/vaddr.h"
+#include "devices/timer.h"
 #include "intrinsic.h"
 #ifdef VM
 #include "vm/vm.h"
 #endif
 
 static void process_cleanup (void);
-static bool load (const char *file_name, struct intr_frame *if_);
+static bool load (char *file_name, struct intr_frame *if_);
 static void initd (void *f_name);
 static void __do_fork (void *);
 
@@ -41,17 +42,35 @@ process_init (void) {
 tid_t
 process_create_initd (const char *file_name) {
 	char *fn_copy;
+	char *thread_name;
+	char *space;
 	tid_t tid;
 
 	/* Make a copy of FILE_NAME.
 	 * Otherwise there's a race between the caller and load(). */
+	/* FILE_NAME의 복사본을 만드세요.
+	 * 그렇지 않으면 호출자와 load() 함수 사이에 경쟁 조건이 발생합니다. */
 	fn_copy = palloc_get_page (0);
 	if (fn_copy == NULL)
 		return TID_ERROR;
 	strlcpy (fn_copy, file_name, PGSIZE);
 
+	thread_name = palloc_get_page (0);
+	if (thread_name == NULL) {
+		palloc_free_page(fn_copy);
+		return TID_ERROR;
+	}
+		
+	strlcpy (thread_name, file_name, PGSIZE);
+
+	// copied_file_name의 첫 번째 인자만 추출하기
+	space = strchr(thread_name, ' ');
+	if (space != NULL) {
+		*space = '\0';
+	}
+
 	/* Create a new thread to execute FILE_NAME. */
-	tid = thread_create (file_name, PRI_DEFAULT, initd, fn_copy);
+	tid = thread_create (thread_name, PRI_DEFAULT, initd, fn_copy);
 	if (tid == TID_ERROR)
 		palloc_free_page (fn_copy);
 	return tid;
@@ -199,11 +218,25 @@ process_exec (void *f_name) {
  *
  * This function will be implemented in problem 2-2.  For now, it
  * does nothing. */
+/* 스레드 TID가 종료될 때까지 기다렸다가 종료 상태를 반환합니다.
+ * 커널에 의해 종료된 경우(예: 예외로 인해 강제 종료된 경우)
+ * -1을 반환합니다. TID가 유효하지 않거나 호출 프로세스의 자식이 아니거나,
+ * process_wait()가 이미 해당 TID에 대해 성공적으로 호출된 경우,
+ * 대기하지 않고 즉시 -1을 반환합니다.
+ *
+ * 이 함수는 문제 2-2에서 구현될 예정입니다. 현재는
+ * 아무런 동작도 하지 않습니다. */
 int
 process_wait (tid_t child_tid UNUSED) {
 	/* XXX: Hint) The pintos exit if process_wait (initd), we recommend you
 	 * XXX:       to add infinite loop here before
 	 * XXX:       implementing the process_wait. */
+
+	// 커널 main thread가 살아있으면서 일정 시간동안 계속 잠들게 하기 위한 임시 무한루프 코드
+	for (int i = 0; i < 30; i++) {
+		timer_sleep (100);
+	}
+
 	return -1;
 }
 
@@ -211,11 +244,7 @@ process_wait (tid_t child_tid UNUSED) {
 void
 process_exit (void) {
 	struct thread *curr = thread_current ();
-	/* TODO: Your code goes here.
-	 * TODO: Implement process termination message (see
-	 * TODO: project2/process_termination.html).
-	 * TODO: We recommend you to implement process resource cleanup here. */
-
+	printf ("%s: exit(%d)\n", curr->name, curr->exit_status); 
 	process_cleanup ();
 }
 
@@ -276,6 +305,8 @@ process_activate (struct thread *next) {
 #define PF_W 2          /* Writable. */
 #define PF_R 4          /* Readable. */
 
+#define MAX_ARGV	64		/* 최대 인자 개수 */		
+
 /* Executable header.  See [ELF1] 1-4 to 1-8.
  * This appears at the very beginning of an ELF binary. */
 struct ELF64_hdr {
@@ -321,24 +352,52 @@ static bool load_segment (struct file *file, off_t ofs, uint8_t *upage,
  * and its initial stack pointer into *RSP.
  * Returns true if successful, false otherwise. */
 static bool
-load (const char *file_name, struct intr_frame *if_) {
+load (char *file_name, struct intr_frame *if_) {
 	struct thread *t = thread_current ();
 	struct ELF ehdr;
 	struct file *file = NULL;
 	off_t file_ofs;
 	bool success = false;
 	int i;
-
+	int order_size = strlen(file_name);
+	size_t padding; // word-align
+	
 	/* Allocate and activate page directory. */
+	/* 해당 프로세스의 사용자 가상 주소 공간 */
 	t->pml4 = pml4_create ();
 	if (t->pml4 == NULL)
-		goto done;
+	goto done;
 	process_activate (thread_current ());
 
+	// file_name 을 파싱하는 함수가 이 단계 이전 어딘가에 들어가야 함.
+	// 토크나이저 사용
+	int64_t argc = 0;		// argv 개수
+	char *tmp_argv[MAX_ARGV]; // 임시 argv 배열
+	char *argv[MAX_ARGV + 1];	// argv 배열
+	char * save_ptr = NULL; // file_name의 마지막 주소 보관
+	char *token;
+
+	for (token = strtok_r(file_name, " ", &save_ptr); token != NULL; token = strtok_r(NULL, " ", &save_ptr)) {
+		
+		// 메모리 오염 방어 코드
+		if (argc >= MAX_ARGV) { 
+			goto done;
+		}
+
+		tmp_argv[argc] = token;
+		argc++;
+	}
+
+	// filesys_open(tmp_argv[0])에서 초기화되지 않은 값을 쓰는 상황을 막기 위한 방어 코드
+	
+	if (argc == 0) {
+		goto done;
+	}
+	
 	/* Open executable file. */
-	file = filesys_open (file_name);
+	file = filesys_open (tmp_argv[0]);
 	if (file == NULL) {
-		printf ("load: %s: open failed\n", file_name);
+		printf ("load: %s: open failed\n", tmp_argv[0]);
 		goto done;
 	}
 
@@ -417,6 +476,48 @@ load (const char *file_name, struct intr_frame *if_) {
 	/* TODO: Your code goes here.
 	 * TODO: Implement argument passing (see project2/argument_passing.html). */
 
+	// 각 문자열의 주소를 스택에 오른쪽에서 왼쪽 순서로 push합니다.(tmp_arvg 끝부터 역순으로 넣는다.) 
+	if_->rsp = USER_STACK;
+	
+	// 문자열들을 복사하여 실제 argv 배열에 역순으로 넣기
+	for (int i = argc - 1; i >= 0 ; i--) {
+		size_t len = strlen (tmp_argv[i]) + 1;
+
+		if_->rsp -= len; // 넣을 만큼 빼주어야 함
+		memcpy((void *)if_->rsp, tmp_argv[i], len); // start / end / sizeof
+
+		// argv[] 에 스택의 주소값 저장
+		argv[i] = (char *)if_->rsp;	
+		// printf("if_->rsp === %x\n", if_->rsp); // debug
+	}
+
+	// padding으로 rsp를 8바이트 정렬
+	padding = if_->rsp % 8; // 8의 배수로 맞추기 위한 패딩 
+	if_->rsp -= padding; // 스택 넘버가 감소하는 방향으로 진행되기 때문
+
+	// NULL sentinel: argv[argc]가 null 포인터가 되도록 넣기
+	argv[argc] = NULL;
+
+	// 위에서 넣은 argv의 주소값을 8바이트 단위로 스택에 넣기.
+	for (int i = argc; i >= 0 ; i--) {
+
+		// 넣을 만큼 빼주어야 함
+		if_->rsp -= sizeof(argv[i]);
+
+		// 스택에 argv[]의 인자의 주소값 저장
+		memcpy((void *)if_->rsp, &argv[i], sizeof(argv[i]));
+		// printf("&argv[i] === %x\n", argv[i]); // debug
+	}
+
+	// %rsi가 argv(argv[0]의 주소)를 가리키게 하고, %rdi에는 argc를 넣습니다.
+	if_->R.rsi = if_->rsp;
+	if_->R.rdi = argc;
+
+	// fake address 반환 - 문자열 "0"이 아닌 8바이트짜리 NULL 값을 넣어야 함.
+	void *fake_ret = NULL;
+	if_->rsp -= sizeof(fake_ret);
+	memcpy((void *)if_->rsp, &fake_ret, sizeof(fake_ret));
+
 	success = true;
 
 done:
@@ -424,7 +525,6 @@ done:
 	file_close (file);
 	return success;
 }
-
 
 /* Checks whether PHDR describes a valid, loadable segment in
  * FILE and returns true if so, false otherwise. */
