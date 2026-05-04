@@ -33,6 +33,7 @@ static void __do_fork (void *);
 struct fork_aux {
 	struct thread *parent;
 	struct intr_frame parent_if;
+	struct child_status *child_info;
 };
 
 struct fd_entry {
@@ -271,13 +272,38 @@ initd (void *f_name) {
  * TID_ERROR if the thread cannot be created. */
 tid_t
 process_fork (const char *name, struct intr_frame *if_) {
+
+	struct thread *parent = thread_current (); // 현재 스레드가 부모 스레드가 됨
+
 	/* process_fork()에서 parent intr_frame을 child에게 넘길 수 있게 aux 구조체 할당.*/
 	struct fork_aux *aux = malloc (sizeof *aux);
 	if (aux == NULL) {
 		return TID_ERROR;
 	}
 
-	aux->parent = thread_current (); // parent 저장
+	// 자식 상태 구조체 할당
+	struct child_status *cs = malloc (sizeof *cs);
+	if (cs == NULL) {
+		free (aux);
+		return TID_ERROR;
+	}
+
+	/* cs 초기화 */
+	cs->tid = TID_ERROR;
+	cs->exit_status = -1;
+	cs->waited = false;
+	cs->load_done = false;
+	cs->load_success = false;
+	cs->ref_cnt = 2;
+	sema_init (&cs->load_sema, 0);
+	sema_init (&cs->exit_sema, 0);
+
+	// 현재 실행 중인 부모 thread의 children 리스트에 새 자식 상태 cs를 등록
+	list_push_back (&parent->children, &cs->elem);
+
+	aux->child_info = cs; // child 저장
+
+	aux->parent = parent; // parent 저장
 
 	/* 부모의 syscall 진입 시점 레지스터 상태를 자식에게 넘기기 위해 aux에 복사한다. */
 	memcpy (&aux->parent_if, if_, sizeof *if_); // parent intr_frame 복사
@@ -285,7 +311,19 @@ process_fork (const char *name, struct intr_frame *if_) {
 	/* thread_create에 parent thread 대신 aux 전달. __do_fork()에서는 aux를 받아 intr_frame 복사 */
 	tid_t tid = thread_create (name, PRI_DEFAULT, __do_fork, aux);
 	if (tid == TID_ERROR) {
+		list_remove (&cs->elem);
+		free (cs);
 		free(aux);
+		return TID_ERROR;
+	}
+
+	// 부모, 자식의 tid 동기화
+	cs->tid = tid;
+	sema_down (&cs->load_sema);
+	if (!cs->load_success) {
+		list_remove (&cs->elem);
+		child_status_release (cs);
+		child_status_release (cs);
 		return TID_ERROR;
 	}
 
@@ -355,6 +393,8 @@ __do_fork (void *aux) {
 	struct intr_frame *parent_if = &fork_aux->parent_if;
 	bool succ = true;
 
+	current->child_info = fork_aux->child_info;
+
 	/* 1. Read the cpu context to local stack. */
 	/* fork()에서는 부모와 자식이 거의 같은 실행 상태에서 이어서 실행되어야 함.
 		그래서 부모의 intr_frame을 자식 쪽 로컬 변수 if_에 복사 */
@@ -366,27 +406,49 @@ __do_fork (void *aux) {
 	fork_aux = NULL;
 
 	/* 2. Duplicate PT */
+	/* 주소 공간 복제 */
 	current->pml4 = pml4_create();
-	if (current->pml4 == NULL)
-		goto error;
+	if (current->pml4 == NULL) {
+		succ = false;
+		goto done;
+	}
+
 
 	process_activate (current);
 #ifdef VM
 	supplemental_page_table_init (&current->spt);
-	if (!supplemental_page_table_copy (&current->spt, &parent->spt))
-		goto error;
+	if (!supplemental_page_table_copy (&current->spt, &parent->spt)) {
+		succ = false;
+		goto done;
+	}
 #else
-	if (!pml4_for_each (parent->pml4, duplicate_pte, parent))
-		goto error;
+	if (!pml4_for_each (parent->pml4, duplicate_pte, parent)) {
+		succ = false;
+		goto done;
+	}
 #endif
 
+	/* 자식 userprog 상태 초기화 */
 	process_init ();
 
+	/* 부모 fd table 복제 */
+	if (!process_duplicate_fds (current, parent)) {
+		succ = false;
+		goto done;
+	}
+
+	/* 성공/실패 결과를 child_status에 기록. 부모에게 fork 준비 완료를 알림 */
+done:
+	current->child_info->load_success = succ;
+	current->child_info->load_done = true;
+	sema_up (&current->child_info->load_sema); // sema_up()으로 부모 깨움
+
 	/* Finally, switch to the newly created process. */
-	if (succ)
-		do_iret (&if_);
-error:
-	thread_exit ();
+	if (succ) {
+		do_iret (&if_); // 성공이면 do_iret()
+	}
+
+	thread_exit (); // 실패면 thread_exit()
 }
 
 /* Switch the current execution context to the f_name.
@@ -463,6 +525,13 @@ process_exit (void) {
 		file_close (curr->exec_file);
 		curr->exec_file = NULL;
 	}
+
+	// 부모가 wait()에서 받을 수 있도록 현재 프로세스의 종료 상태를 기록
+	if (curr->child_info != NULL) {
+		curr->child_info->exit_status = curr->exit_status;
+		sema_up (&curr->child_info->exit_sema);
+	}
+
 	process_cleanup ();
 }
 
@@ -683,15 +752,16 @@ load (char *file_name, struct intr_frame *if_) {
 	}
 
 	/* Set up stack. */
-	if (!setup_stack (if_))
+	if (!setup_stack (if_)) {
 		goto done;
+	}
 
 	/* Start address. */
 	if_->rip = ehdr.e_entry;
 
 	// 각 문자열의 주소를 스택에 오른쪽에서 왼쪽 순서로 push합니다.(tmp_argv 끝부터 역순으로 넣는다.)
 	if_->rsp = USER_STACK;
-	
+
 	// 문자열들을 복사하여 실제 argv 배열에 역순으로 넣기
 	for (int i = argc - 1; i >= 0; i--) {
 		size_t len = strlen (tmp_argv[i]) + 1;
