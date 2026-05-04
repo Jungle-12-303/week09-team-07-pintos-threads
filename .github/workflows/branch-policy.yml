@@ -57,6 +57,37 @@ jobs:
               },
             };
 
+            const teamReviewersByAuthor = {
+              kdh949: ['legendLEE98', 'HyungminYoon1'],
+              legendLEE98: ['kdh949', 'HyungminYoon1'],
+              HyungminYoon1: ['kdh949', 'legendLEE98'],
+            };
+
+            function policyForDevPullRequest(headBranch, prAuthor) {
+              const personalBranchPolicy = branchPolicy[headBranch];
+              if (personalBranchPolicy) {
+                return personalBranchPolicy;
+              }
+
+              // Poka-yoke: shared practice branches still require every non-author teammate approval.
+              if (headBranch.startsWith('practice/')) {
+                const reviewers = teamReviewersByAuthor[prAuthor];
+                if (!reviewers) {
+                  fail(
+                    `practice/* -> dev pull requests must be opened by one of: ` +
+                    `${Object.keys(teamReviewersByAuthor).join(', ')}. Current author: ${prAuthor}.`
+                  );
+                }
+
+                return {
+                  author: prAuthor,
+                  reviewers,
+                };
+              }
+
+              return null;
+            }
+
             const { owner, repo } = context.repo;
             let pr = context.payload.pull_request;
 
@@ -132,9 +163,9 @@ jobs:
                 return;
               }
 
-              const policy = branchPolicy[headBranch];
+              const policy = policyForDevPullRequest(headBranch, prAuthor);
               if (!policy) {
-                fail(`Only donghyun, changwon, or hyungmin branches may target dev. Current head branch: ${headBranch}.`);
+                fail(`Only donghyun, changwon, hyungmin, or practice/* branches may target dev. Current head branch: ${headBranch}.`);
               }
 
               if (prAuthor !== policy.author) {
