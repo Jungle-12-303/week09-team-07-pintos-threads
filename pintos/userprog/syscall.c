@@ -145,7 +145,9 @@ syscall_handler (struct intr_frame *f) {
 		f->R.rax = -1;
 		break;
 	case SYS_CREATE:// TODO: A                 /* Create a file. */
-		f->R.rax = -1;
+		// 값 들어 오는 것 확인
+		// rdi로 데이터 들어옴
+		filesys_create((char *)f->R.rdi, f->R.rsi);
 		break;
 	case SYS_REMOVE:// TODO: A                 /* Delete a file. */
 		f->R.rax = -1;
