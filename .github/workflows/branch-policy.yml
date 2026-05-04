@@ -57,6 +57,39 @@ jobs:
               },
             };
 
+            const teamReviewersByAuthor = {
+              kdh949: ['legendLEE98', 'HyungminYoon1'],
+              legendLEE98: ['kdh949', 'HyungminYoon1'],
+              HyungminYoon1: ['kdh949', 'legendLEE98'],
+            };
+            const sharedDevBranchPrefixes = ['practice/', 'codex/'];
+
+            function policyForDevPullRequest(headBranch, prAuthor) {
+              const personalBranchPolicy = branchPolicy[headBranch];
+              if (personalBranchPolicy) {
+                return personalBranchPolicy;
+              }
+
+              // Poka-yoke: shared work branches still require every non-author teammate approval.
+              if (sharedDevBranchPrefixes.some((prefix) => headBranch.startsWith(prefix))) {
+                const reviewers = teamReviewersByAuthor[prAuthor];
+                if (!reviewers) {
+                  fail(
+                    `${sharedDevBranchPrefixes.map((prefix) => `${prefix}*`).join(', ')} -> dev pull requests ` +
+                    `must be opened by one of: ` +
+                    `${Object.keys(teamReviewersByAuthor).join(', ')}. Current author: ${prAuthor}.`
+                  );
+                }
+
+                return {
+                  author: prAuthor,
+                  reviewers,
+                };
+              }
+
+              return null;
+            }
+
             const { owner, repo } = context.repo;
             let pr = context.payload.pull_request;
 
@@ -88,7 +121,11 @@ jobs:
 
             try {
               if (context.eventName === 'workflow_dispatch') {
-                const prNumberInput = core.getInput('pr_number', { required: true });
+                const prNumberInput = context.payload.inputs?.pr_number;
+                if (!prNumberInput) {
+                  fail('workflow_dispatch requires pr_number input.');
+                }
+
                 const prNumber = Number.parseInt(prNumberInput, 10);
                 if (!Number.isInteger(prNumber) || prNumber <= 0) {
                   fail(`pr_number must be a positive integer. Current value: ${prNumberInput}.`);
@@ -132,9 +169,13 @@ jobs:
                 return;
               }
 
-              const policy = branchPolicy[headBranch];
+              const policy = policyForDevPullRequest(headBranch, prAuthor);
               if (!policy) {
-                fail(`Only donghyun, changwon, or hyungmin branches may target dev. Current head branch: ${headBranch}.`);
+                fail(
+                  `Only donghyun, changwon, hyungmin, or ` +
+                  `${sharedDevBranchPrefixes.map((prefix) => `${prefix}*`).join(', ')} branches may target dev. ` +
+                  `Current head branch: ${headBranch}.`
+                );
               }
 
               if (prAuthor !== policy.author) {
