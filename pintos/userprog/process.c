@@ -577,26 +577,25 @@ load (char *file_name, struct intr_frame *if_) {
 	off_t file_ofs;
 	bool success = false;
 	int i;
-	int order_size = strlen(file_name);
 	size_t padding; // word-align
 	
 	/* Allocate and activate page directory. */
 	/* 해당 프로세스의 사용자 가상 주소 공간 */
 	t->pml4 = pml4_create ();
-	if (t->pml4 == NULL)
-	goto done;
+	if (t->pml4 == NULL) {
+		goto done;
+	}
+
 	process_activate (thread_current ());
 
-	// file_name 을 파싱하는 함수가 이 단계 이전 어딘가에 들어가야 함.
 	// 토크나이저 사용
 	int64_t argc = 0;		// argv 개수
 	char *tmp_argv[MAX_ARGV]; // 임시 argv 배열
 	char *argv[MAX_ARGV + 1];	// argv 배열
-	char * save_ptr = NULL; // file_name의 마지막 주소 보관
+	char *save_ptr = NULL; // file_name의 마지막 주소 보관
 	char *token;
 
-	for (token = strtok_r(file_name, " ", &save_ptr); token != NULL; token = strtok_r(NULL, " ", &save_ptr)) {
-		
+	for (token = strtok_r (file_name, " ", &save_ptr); token != NULL; token = strtok_r (NULL, " ", &save_ptr)) {
 		// 메모리 오염 방어 코드
 		if (argc >= MAX_ARGV) { 
 			goto done;
@@ -607,7 +606,6 @@ load (char *file_name, struct intr_frame *if_) {
 	}
 
 	// filesys_open(tmp_argv[0])에서 초기화되지 않은 값을 쓰는 상황을 막기 위한 방어 코드
-	
 	if (argc == 0) {
 		goto done;
 	}
@@ -691,18 +689,15 @@ load (char *file_name, struct intr_frame *if_) {
 	/* Start address. */
 	if_->rip = ehdr.e_entry;
 
-	/* TODO: Your code goes here.
-	 * TODO: Implement argument passing (see project2/argument_passing.html). */
-
-	// 각 문자열의 주소를 스택에 오른쪽에서 왼쪽 순서로 push합니다.(tmp_arvg 끝부터 역순으로 넣는다.) 
+	// 각 문자열의 주소를 스택에 오른쪽에서 왼쪽 순서로 push합니다.(tmp_argv 끝부터 역순으로 넣는다.)
 	if_->rsp = USER_STACK;
 	
 	// 문자열들을 복사하여 실제 argv 배열에 역순으로 넣기
-	for (int i = argc - 1; i >= 0 ; i--) {
+	for (int i = argc - 1; i >= 0; i--) {
 		size_t len = strlen (tmp_argv[i]) + 1;
 
 		if_->rsp -= len; // 넣을 만큼 빼주어야 함
-		memcpy((void *)if_->rsp, tmp_argv[i], len); // start / end / sizeof
+		memcpy ((void *)if_->rsp, tmp_argv[i], len); // start / end / sizeof
 
 		// argv[] 에 스택의 주소값 저장
 		argv[i] = (char *)if_->rsp;	
@@ -723,7 +718,7 @@ load (char *file_name, struct intr_frame *if_) {
 		if_->rsp -= sizeof(argv[i]);
 
 		// 스택에 argv[]의 인자의 주소값 저장
-		memcpy((void *)if_->rsp, &argv[i], sizeof(argv[i]));
+		memcpy ((void *)if_->rsp, &argv[i], sizeof(argv[i]));
 		// printf("&argv[i] === %x\n", argv[i]); // debug
 	}
 
@@ -734,7 +729,7 @@ load (char *file_name, struct intr_frame *if_) {
 	// fake address 반환 - 문자열 "0"이 아닌 8바이트짜리 NULL 값을 넣어야 함.
 	void *fake_ret = NULL;
 	if_->rsp -= sizeof(fake_ret);
-	memcpy((void *)if_->rsp, &fake_ret, sizeof(fake_ret));
+	memcpy ((void *)if_->rsp, &fake_ret, sizeof(fake_ret));
 
 	success = true;
 
