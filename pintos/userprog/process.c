@@ -240,6 +240,8 @@ process_create_initd (const char *file_name) {
 
 	/* Create a new thread to execute FILE_NAME. */
 	tid = thread_create (thread_name, PRI_DEFAULT, initd, fn_copy);
+	palloc_free_page (thread_name); // thread_name 메모리 해제
+
 	if (tid == TID_ERROR)
 		palloc_free_page (fn_copy);
 	return tid;
