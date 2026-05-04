@@ -29,6 +29,12 @@ static bool load (char *file_name, struct intr_frame *if_);
 static void initd (void *f_name);
 static void __do_fork (void *);
 
+// thread fork를 위한 구조체
+struct fork_aux {
+	struct thread *parent;
+	struct intr_frame parent_if;
+};
+
 struct fd_entry {
 	int fd;
 	struct file *file;
@@ -263,11 +269,39 @@ initd (void *f_name) {
 
 /* Clones the current process as `name`. Returns the new process's thread id, or
  * TID_ERROR if the thread cannot be created. */
+
+ /*
+	아래의 내용을 반영해야 함.
+
+	1. process_fork()에서 parent intr_frame을 child에게 넘길 수 있게 aux 구조체 준비
+	2. child_status 생성 및 children list 연결
+	3. thread_create()에 parent thread만 넘기는 대신 aux 구조체 넘기기
+	4. parent는 child가 복제 성공/실패를 알릴 때까지 기다리기
+	5. __do_fork()에서 aux를 받아 intr_frame 복사
+	6. child 쪽 if_.R.rax = 0 설정
+ */
 tid_t
-process_fork (const char *name, struct intr_frame *if_ UNUSED) {
+process_fork (const char *name, struct intr_frame *if_) {
 	/* Clone current thread to new thread.*/
-	return thread_create (name,
-			PRI_DEFAULT, __do_fork, thread_current ());
+	tid_t tid;
+	struct fork_aux *aux = malloc (sizeof *aux); // aux 구조체 할당
+
+	if (aux == NULL) {
+		return TID_ERROR;
+	}
+
+	aux->parent = thread_current (); // parent 저장
+
+	memcpy (&aux->parent_if, if_, sizeof *if_); // parent intr_frame 복사
+
+	tid = thread_create (name, PRI_DEFAULT, __do_fork, aux); // thread_create에 aux 전달
+
+	if (tid == TID_ERROR) {
+		free(aux);
+		return TID_ERROR;
+	}
+
+	return tid;
 }
 
 #ifndef VM
@@ -306,17 +340,28 @@ duplicate_pte (uint64_t *pte, void *va, void *aux) {
  * Hint) parent->tf does not hold the userland context of the process.
  *       That is, you are required to pass second argument of process_fork to
  *       this function. */
+
+/* __do_fork()가 thread_current()만 받은 것이 아니라,
+	process_fork()에서 만든 struct fork_aux를 받는 함수로 바뀌어야 함.
+*/
 static void
 __do_fork (void *aux) {
-	struct intr_frame if_;
-	struct thread *parent = (struct thread *) aux;
+	struct fork_aux *fork_aux = aux; // void *aux를 struct fork_aux *로 해석하기 위해 형변환
+	struct intr_frame if_; // 인터럽트/시스템콜 진입 시점의 CPU 레지스터 상태를 담는 구조체 변수
+	struct thread *parent = fork_aux->parent;
 	struct thread *current = thread_current ();
-	/* TODO: somehow pass the parent_if. (i.e. process_fork()'s if_) */
-	struct intr_frame *parent_if;
+	struct intr_frame *parent_if = &fork_aux->parent_if;
 	bool succ = true;
 
 	/* 1. Read the cpu context to local stack. */
+	/* fork()에서는 부모와 자식이 거의 같은 실행 상태에서 이어서 실행되어야 함.
+		그래서 부모의 intr_frame을 자식 쪽 로컬 변수 if_에 복사 */
 	memcpy (&if_, parent_if, sizeof (struct intr_frame));
+	if_.R.rax = 0; // 자식은 fork()의 반환값이 0이어야 함
+
+	// 사용한 메모리 해제
+	free (fork_aux);
+	fork_aux = NULL;
 
 	/* 2. Duplicate PT */
 	current->pml4 = pml4_create();
@@ -332,12 +377,6 @@ __do_fork (void *aux) {
 	if (!pml4_for_each (parent->pml4, duplicate_pte, parent))
 		goto error;
 #endif
-
-	/* TODO: Your code goes here.
-	 * TODO: Hint) To duplicate the file object, use `file_duplicate`
-	 * TODO:       in include/filesys/file.h. Note that parent should not return
-	 * TODO:       from the fork() until this function successfully duplicates
-	 * TODO:       the resources of parent.*/
 
 	process_init ();
 

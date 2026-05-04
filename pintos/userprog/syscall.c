@@ -148,9 +148,14 @@ syscall_handler (struct intr_frame *f) {
 	case SYS_EXIT:                   /* Terminate this process. */
 		process_exit_with_status((int) f->R.rdi);
 		break;
-	case SYS_FORK:// TODO: B                   /* Clone current process. */
-		f->R.rax = -1;
-		break;	
+	//
+	case SYS_FORK: {                   /* Clone current process. */
+		const char *thread_name = (const char *) f->R.rdi; // fork(const char *thread_name)의 첫 번째 인자
+
+		user_check_string (thread_name);
+		f->R.rax = process_fork (thread_name, f); // fork() syscall 실패시 부모에게 -1 반환, 성공시 child tid 반환
+		break;
+	}
 	// 이미 실행 중인 user process가 exec()를 요청한 상황
 	case SYS_EXEC: {                   /* Switch current process. */
 		const char *cmd_line = (const char *) f->R.rdi; // exec(const char *file)의 첫 번째 인자
