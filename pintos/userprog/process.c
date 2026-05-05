@@ -528,6 +528,7 @@ done:
  * Returns -1 on fail. */
 int
 process_exec (void *f_name) {
+	struct thread *cur = thread_current ();
 	char *file_name = f_name;
 	bool success;
 
@@ -540,6 +541,12 @@ process_exec (void *f_name) {
 	_if.eflags = FLAG_IF | FLAG_MBS;
 
 	/* We first kill the current context */
+	if (cur->exec_file != NULL) {
+		file_allow_write (cur->exec_file);
+		file_close (cur->exec_file);
+		cur->exec_file = NULL;
+	}
+
 	process_cleanup ();
 
 	/* And then load the binary */
@@ -891,9 +898,16 @@ load (char *file_name, struct intr_frame *if_) {
 
 	success = true;
 
+	// rox 구현: 파일 로드가 성공한 경우에는 닫지 않고 현재 thread에 보관
+	file_deny_write (file);
+	thread_current ()->exec_file = file;
+
 done:
 	/* We arrive here whether the load is successful or not. */
-	file_close (file);
+	if (!success && file != NULL) {
+		file_close (file);
+	}
+
 	return success;
 }
 
