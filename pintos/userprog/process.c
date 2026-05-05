@@ -103,7 +103,7 @@ process_find_fd_entry (struct thread *t, int fd) {
 		return NULL;
 
 	for (e = list_begin (&t->fd_table); e != list_end (&t->fd_table);
-			e = list_next (e)) {
+	     e = list_next (e)) {
 		struct fd_entry *entry = list_entry (e, struct fd_entry, elem);
 		if (entry->fd == fd)
 			return entry;
@@ -161,7 +161,7 @@ process_duplicate_fds (struct thread *dst, struct thread *src) {
 
 	dst->next_fd = src->next_fd;
 	for (e = list_begin (&src->fd_table); e != list_end (&src->fd_table);
-			e = list_next (e)) {
+	     e = list_next (e)) {
 		struct fd_entry *src_entry = list_entry (e, struct fd_entry, elem);
 		struct fd_entry *dst_entry = malloc (sizeof *dst_entry);
 		if (dst_entry == NULL)
@@ -191,7 +191,7 @@ process_find_child (tid_t tid) {
 		return NULL;
 
 	for (e = list_begin (&cur->children); e != list_end (&cur->children);
-			e = list_next (e)) {
+	     e = list_next (e)) {
 		struct child_status *cs = list_entry (e, struct child_status, elem);
 		if (cs->tid == tid)
 			return cs;
@@ -335,7 +335,6 @@ initd (void *aux) {
  * TID_ERROR if the thread cannot be created. */
 tid_t
 process_fork (const char *name, struct intr_frame *if_) {
-
 	struct thread *parent = thread_current (); // 현재 스레드가 부모 스레드가 됨
 
 	/* process_fork()에서 parent intr_frame을 child에게 넘길 수 있게 aux 구조체 할당.*/
@@ -376,7 +375,7 @@ process_fork (const char *name, struct intr_frame *if_) {
 	if (tid == TID_ERROR) {
 		list_remove (&cs->elem);
 		free (cs);
-		free(aux);
+		free (aux);
 		return TID_ERROR;
 	}
 
@@ -449,7 +448,7 @@ duplicate_pte (uint64_t *pte, void *va, void *aux) {
 static void
 __do_fork (void *aux) {
 	struct fork_aux *fork_aux = aux; // void *aux를 struct fork_aux *로 해석하기 위해 형변환
-	struct intr_frame if_; // 인터럽트/시스템콜 진입 시점의 CPU 레지스터 상태를 담는 구조체 변수
+	struct intr_frame if_;           // 인터럽트/시스템콜 진입 시점의 CPU 레지스터 상태를 담는 구조체 변수
 	struct thread *parent = fork_aux->parent;
 	struct thread *current = thread_current ();
 	struct intr_frame *parent_if = &fork_aux->parent_if;
@@ -459,7 +458,7 @@ __do_fork (void *aux) {
 
 	/* 1. Read the cpu context to local stack. */
 	/* fork()에서는 부모와 자식이 거의 같은 실행 상태에서 이어서 실행되어야 함.
-		그래서 부모의 intr_frame을 자식 쪽 로컬 변수 if_에 복사 */
+	    그래서 부모의 intr_frame을 자식 쪽 로컬 변수 if_에 복사 */
 	memcpy (&if_, parent_if, sizeof (struct intr_frame));
 	if_.R.rax = 0; // 자식은 fork()의 반환값이 0이어야 함
 
@@ -469,12 +468,11 @@ __do_fork (void *aux) {
 
 	/* 2. Duplicate PT */
 	/* 주소 공간 복제 */
-	current->pml4 = pml4_create();
+	current->pml4 = pml4_create ();
 	if (current->pml4 == NULL) {
 		succ = false;
 		goto done;
 	}
-
 
 	process_activate (current);
 #ifdef VM
@@ -543,7 +541,6 @@ process_exec (void *f_name) {
 	do_iret (&_if);
 	NOT_REACHED ();
 }
-
 
 /* Waits for thread TID to die and returns its exit status.  If
  * it was terminated by the kernel (i.e. killed due to an
@@ -662,20 +659,20 @@ process_activate (struct thread *next) {
 /* ELF types.  See [ELF1] 1-2. */
 #define EI_NIDENT 16
 
-#define PT_NULL    0            /* Ignore. */
-#define PT_LOAD    1            /* Loadable segment. */
-#define PT_DYNAMIC 2            /* Dynamic linking info. */
-#define PT_INTERP  3            /* Name of dynamic loader. */
-#define PT_NOTE    4            /* Auxiliary info. */
-#define PT_SHLIB   5            /* Reserved. */
-#define PT_PHDR    6            /* Program header table. */
-#define PT_STACK   0x6474e551   /* Stack segment. */
+#define PT_NULL    0          /* Ignore. */
+#define PT_LOAD    1          /* Loadable segment. */
+#define PT_DYNAMIC 2          /* Dynamic linking info. */
+#define PT_INTERP  3          /* Name of dynamic loader. */
+#define PT_NOTE    4          /* Auxiliary info. */
+#define PT_SHLIB   5          /* Reserved. */
+#define PT_PHDR    6          /* Program header table. */
+#define PT_STACK   0x6474e551 /* Stack segment. */
 
-#define PF_X 1          /* Executable. */
-#define PF_W 2          /* Writable. */
-#define PF_R 4          /* Readable. */
+#define PF_X 1 /* Executable. */
+#define PF_W 2 /* Writable. */
+#define PF_R 4 /* Readable. */
 
-#define MAX_ARGV	64		/* 최대 인자 개수 */		
+#define MAX_ARGV 64 /* 최대 인자 개수 */
 
 /* Executable header.  See [ELF1] 1-4 to 1-8.
  * This appears at the very beginning of an ELF binary. */
@@ -708,14 +705,14 @@ struct ELF64_PHDR {
 };
 
 /* Abbreviations */
-#define ELF ELF64_hdr
+#define ELF  ELF64_hdr
 #define Phdr ELF64_PHDR
 
 static bool setup_stack (struct intr_frame *if_);
 static bool validate_segment (const struct Phdr *, struct file *);
 static bool load_segment (struct file *file, off_t ofs, uint8_t *upage,
-		uint32_t read_bytes, uint32_t zero_bytes,
-		bool writable);
+                          uint32_t read_bytes, uint32_t zero_bytes,
+                          bool writable);
 
 /* Loads an ELF executable from FILE_NAME into the current thread.
  * Stores the executable's entry point into *RIP
@@ -730,7 +727,7 @@ load (char *file_name, struct intr_frame *if_) {
 	bool success = false;
 	int i;
 	size_t padding; // word-align
-	
+
 	/* Allocate and activate page directory. */
 	/* 해당 프로세스의 사용자 가상 주소 공간 */
 	t->pml4 = pml4_create ();
@@ -741,15 +738,15 @@ load (char *file_name, struct intr_frame *if_) {
 	process_activate (thread_current ());
 
 	// 토크나이저 사용
-	int64_t argc = 0;		// argv 개수
+	int64_t argc = 0;         // argv 개수
 	char *tmp_argv[MAX_ARGV]; // 임시 argv 배열
-	char *argv[MAX_ARGV + 1];	// argv 배열
-	char *save_ptr = NULL; // file_name의 마지막 주소 보관
+	char *argv[MAX_ARGV + 1]; // argv 배열
+	char *save_ptr = NULL;    // file_name의 마지막 주소 보관
 	char *token;
 
 	for (token = strtok_r (file_name, " ", &save_ptr); token != NULL; token = strtok_r (NULL, " ", &save_ptr)) {
 		// 메모리 오염 방어 코드
-		if (argc >= MAX_ARGV) { 
+		if (argc >= MAX_ARGV) {
 			goto done;
 		}
 
@@ -761,7 +758,7 @@ load (char *file_name, struct intr_frame *if_) {
 	if (argc == 0) {
 		goto done;
 	}
-	
+
 	/* Open executable file. */
 	file = filesys_open (tmp_argv[0]);
 	if (file == NULL) {
@@ -770,13 +767,8 @@ load (char *file_name, struct intr_frame *if_) {
 	}
 
 	/* Read and verify executable header. */
-	if (file_read (file, &ehdr, sizeof ehdr) != sizeof ehdr
-			|| memcmp (ehdr.e_ident, "\177ELF\2\1\1", 7)
-			|| ehdr.e_type != 2
-			|| ehdr.e_machine != 0x3E // amd64
-			|| ehdr.e_version != 1
-			|| ehdr.e_phentsize != sizeof (struct Phdr)
-			|| ehdr.e_phnum > 1024) {
+	if (file_read (file, &ehdr, sizeof ehdr) != sizeof ehdr || memcmp (ehdr.e_ident, "\177ELF\2\1\1", 7) || ehdr.e_type != 2 || ehdr.e_machine != 0x3E // amd64
+	    || ehdr.e_version != 1 || ehdr.e_phentsize != sizeof (struct Phdr) || ehdr.e_phnum > 1024) {
 		printf ("load: %s: error loading executable\n", file_name);
 		goto done;
 	}
@@ -794,43 +786,41 @@ load (char *file_name, struct intr_frame *if_) {
 			goto done;
 		file_ofs += sizeof phdr;
 		switch (phdr.p_type) {
-			case PT_NULL:
-			case PT_NOTE:
-			case PT_PHDR:
-			case PT_STACK:
-			default:
-				/* Ignore this segment. */
-				break;
-			case PT_DYNAMIC:
-			case PT_INTERP:
-			case PT_SHLIB:
-				goto done;
-			case PT_LOAD:
-				if (validate_segment (&phdr, file)) {
-					bool writable = (phdr.p_flags & PF_W) != 0;
-					uint64_t file_page = phdr.p_offset & ~PGMASK;
-					uint64_t mem_page = phdr.p_vaddr & ~PGMASK;
-					uint64_t page_offset = phdr.p_vaddr & PGMASK;
-					uint32_t read_bytes, zero_bytes;
-					if (phdr.p_filesz > 0) {
-						/* Normal segment.
-						 * Read initial part from disk and zero the rest. */
-						read_bytes = page_offset + phdr.p_filesz;
-						zero_bytes = (ROUND_UP (page_offset + phdr.p_memsz, PGSIZE)
-								- read_bytes);
-					} else {
-						/* Entirely zero.
-						 * Don't read anything from disk. */
-						read_bytes = 0;
-						zero_bytes = ROUND_UP (page_offset + phdr.p_memsz, PGSIZE);
-					}
-					if (!load_segment (file, file_page, (void *) mem_page,
-								read_bytes, zero_bytes, writable))
-						goto done;
+		case PT_NULL:
+		case PT_NOTE:
+		case PT_PHDR:
+		case PT_STACK:
+		default:
+			/* Ignore this segment. */
+			break;
+		case PT_DYNAMIC:
+		case PT_INTERP:
+		case PT_SHLIB:
+			goto done;
+		case PT_LOAD:
+			if (validate_segment (&phdr, file)) {
+				bool writable = (phdr.p_flags & PF_W) != 0;
+				uint64_t file_page = phdr.p_offset & ~PGMASK;
+				uint64_t mem_page = phdr.p_vaddr & ~PGMASK;
+				uint64_t page_offset = phdr.p_vaddr & PGMASK;
+				uint32_t read_bytes, zero_bytes;
+				if (phdr.p_filesz > 0) {
+					/* Normal segment.
+					 * Read initial part from disk and zero the rest. */
+					read_bytes = page_offset + phdr.p_filesz;
+					zero_bytes = (ROUND_UP (page_offset + phdr.p_memsz, PGSIZE) - read_bytes);
+				} else {
+					/* Entirely zero.
+					 * Don't read anything from disk. */
+					read_bytes = 0;
+					zero_bytes = ROUND_UP (page_offset + phdr.p_memsz, PGSIZE);
 				}
-				else
+				if (!load_segment (file, file_page, (void *) mem_page,
+				                   read_bytes, zero_bytes, writable))
 					goto done;
-				break;
+			} else
+				goto done;
+			break;
 		}
 	}
 
@@ -849,29 +839,28 @@ load (char *file_name, struct intr_frame *if_) {
 	for (int i = argc - 1; i >= 0; i--) {
 		size_t len = strlen (tmp_argv[i]) + 1;
 
-		if_->rsp -= len; // 넣을 만큼 빼주어야 함
-		memcpy ((void *)if_->rsp, tmp_argv[i], len); // start / end / sizeof
+		if_->rsp -= len;                              // 넣을 만큼 빼주어야 함
+		memcpy ((void *) if_->rsp, tmp_argv[i], len); // start / end / sizeof
 
 		// argv[] 에 스택의 주소값 저장
-		argv[i] = (char *)if_->rsp;	
+		argv[i] = (char *) if_->rsp;
 		// printf("if_->rsp === %x\n", if_->rsp); // debug
 	}
 
 	// padding으로 rsp를 8바이트 정렬
-	padding = if_->rsp % 8; // 8의 배수로 맞추기 위한 패딩 
-	if_->rsp -= padding; // 스택 넘버가 감소하는 방향으로 진행되기 때문
+	padding = if_->rsp % 8; // 8의 배수로 맞추기 위한 패딩
+	if_->rsp -= padding;    // 스택 넘버가 감소하는 방향으로 진행되기 때문
 
 	// NULL sentinel: argv[argc]가 null 포인터가 되도록 넣기
 	argv[argc] = NULL;
 
 	// 위에서 넣은 argv의 주소값을 8바이트 단위로 스택에 넣기.
-	for (int i = argc; i >= 0 ; i--) {
-
+	for (int i = argc; i >= 0; i--) {
 		// 넣을 만큼 빼주어야 함
-		if_->rsp -= sizeof(argv[i]);
+		if_->rsp -= sizeof (argv[i]);
 
 		// 스택에 argv[]의 인자의 주소값 저장
-		memcpy ((void *)if_->rsp, &argv[i], sizeof(argv[i]));
+		memcpy ((void *) if_->rsp, &argv[i], sizeof (argv[i]));
 		// printf("&argv[i] === %x\n", argv[i]); // debug
 	}
 
@@ -881,8 +870,8 @@ load (char *file_name, struct intr_frame *if_) {
 
 	// fake address 반환 - 문자열 "0"이 아닌 8바이트짜리 NULL 값을 넣어야 함.
 	void *fake_ret = NULL;
-	if_->rsp -= sizeof(fake_ret);
-	memcpy ((void *)if_->rsp, &fake_ret, sizeof(fake_ret));
+	if_->rsp -= sizeof (fake_ret);
+	memcpy ((void *) if_->rsp, &fake_ret, sizeof (fake_ret));
 
 	success = true;
 
@@ -960,7 +949,7 @@ static bool install_page (void *upage, void *kpage, bool writable);
  * or disk read error occurs. */
 static bool
 load_segment (struct file *file, off_t ofs, uint8_t *upage,
-		uint32_t read_bytes, uint32_t zero_bytes, bool writable) {
+              uint32_t read_bytes, uint32_t zero_bytes, bool writable) {
 	ASSERT ((read_bytes + zero_bytes) % PGSIZE == 0);
 	ASSERT (pg_ofs (upage) == 0);
 	ASSERT (ofs % PGSIZE == 0);
@@ -987,7 +976,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 
 		/* Add the page to the process's address space. */
 		if (!install_page (upage, kpage, writable)) {
-			printf("fail\n");
+			printf ("fail\n");
 			palloc_free_page (kpage);
 			return false;
 		}
@@ -1032,8 +1021,7 @@ install_page (void *upage, void *kpage, bool writable) {
 
 	/* Verify that there's not already a page at that virtual
 	 * address, then map our page there. */
-	return (pml4_get_page (t->pml4, upage) == NULL
-			&& pml4_set_page (t->pml4, upage, kpage, writable));
+	return (pml4_get_page (t->pml4, upage) == NULL && pml4_set_page (t->pml4, upage, kpage, writable));
 }
 #else
 /* From here, codes will be used after project 3.
@@ -1063,7 +1051,7 @@ lazy_load_segment (struct page *page, void *aux) {
  * or disk read error occurs. */
 static bool
 load_segment (struct file *file, off_t ofs, uint8_t *upage,
-		uint32_t read_bytes, uint32_t zero_bytes, bool writable) {
+              uint32_t read_bytes, uint32_t zero_bytes, bool writable) {
 	ASSERT ((read_bytes + zero_bytes) % PGSIZE == 0);
 	ASSERT (pg_ofs (upage) == 0);
 	ASSERT (ofs % PGSIZE == 0);
@@ -1078,7 +1066,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 		/* TODO: Set up aux to pass information to the lazy_load_segment. */
 		void *aux = NULL;
 		if (!vm_alloc_page_with_initializer (VM_ANON, upage,
-					writable, lazy_load_segment, aux))
+		                                     writable, lazy_load_segment, aux))
 			return false;
 
 		/* Advance. */

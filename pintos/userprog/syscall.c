@@ -148,7 +148,7 @@ syscall_handler (struct intr_frame *f) {
 	case SYS_EXIT:                   /* Terminate this process. */
 		process_exit_with_status((int) f->R.rdi);
 		break;
-	//
+	// 현재 실행중인 사용자 process를 복사해서 자식 process 생성
 	case SYS_FORK: {                   /* Clone current process. */
 		const char *thread_name = (const char *) f->R.rdi; // fork(const char *thread_name)의 첫 번째 인자
 
