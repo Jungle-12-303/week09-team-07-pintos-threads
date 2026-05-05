@@ -50,6 +50,7 @@ syscall_init (void) {
 			FLAG_IF | FLAG_TF | FLAG_DF | FLAG_IOPL | FLAG_AC | FLAG_NT);
 }
 
+/* 주소 하나가 유효한 user virtual address인지 검사 */
 static bool
 user_addr_mapped (const void *uaddr) {
 	struct thread *cur = thread_current ();
@@ -60,12 +61,17 @@ user_addr_mapped (const void *uaddr) {
 		&& pml4_get_page (cur->pml4, uaddr) != NULL;
 }
 
+/* 주소가 유효하지 않으면 현재 process를 exit(-1)하는 공개 검증 함수 */
 void
 user_check_ptr (const void *uaddr) {
 	if (!user_addr_mapped (uaddr))
 		process_exit_with_status (-1);
 }
 
+/* 이하는 syscall 종류에 맞게 user_check_ptr()를 반복/조합해서 쓰는 상위 helper 함수*/
+
+/* user buffer를 커널이 읽을 때 검증
+   write(fd, buffer, size)에서 buffer 검증 */
 void
 user_check_read (const void *uaddr, size_t size) {
 	uint64_t start;
@@ -88,11 +94,15 @@ user_check_read (const void *uaddr, size_t size) {
 		user_check_ptr ((const void *) page);
 }
 
+/* 커널이 user buffer에 써야 할 때 검증
+   read(fd, buffer, size)에서 buffer 검증 */
 void
 user_check_write (void *uaddr, size_t size) {
 	user_check_read (uaddr, size);
 }
 
+/* user가 넘긴 C 문자열 검증
+   open, create, remove, exec, fork 이름 등에 사용 */
 void
 user_check_string (const char *uaddr) {
 	const char *p;
@@ -104,6 +114,8 @@ user_check_string (const char *uaddr) {
 	}
 }
 
+/* user 문자열을 kernel page로 복사
+   exec처럼 이후 주소 공간이 바뀌거나 오래 보관해야 하는 경우에 사용 */
 char *
 user_strdup (const char *uaddr) {
 	char *copy;
@@ -124,6 +136,7 @@ user_strdup (const char *uaddr) {
 	process_exit_with_status (-1);
 }
 
+/* 커널이 syscall 요청을 받아 실제로 처리하는 dispatcher */
 void
 syscall_handler (struct intr_frame *f) {
 	// x86-64 호출 규약에서 함수 반환값은 RAX 레지스터에 두어야 합니다. 반환값이 있는 시스템 콜은 struct intr_frame의 rax 멤버를 수정해 이를 구현할 수 있습니다.
@@ -139,10 +152,23 @@ syscall_handler (struct intr_frame *f) {
 		break;
 	case SYS_FORK:// TODO: B                   /* Clone current process. */
 		f->R.rax = -1;
+		break;	
+	// 이미 실행 중인 user process가 exec()를 요청한 상황
+	case SYS_EXEC: {                   /* Switch current process. */
+		const char *cmd_line = (const char *) f->R.rdi; // exec(const char *file)의 첫 번째 인자
+		char *cmd_copy;
+
+		user_check_string (cmd_line); // 사용자 입력값 검증
+		cmd_copy = user_strdup (cmd_line); // user 문자열을 커널 페이지로 복사
+
+		if (process_exec (cmd_copy) < 0) {
+			process_exit_with_status (-1);
+		}
+		
+		NOT_REACHED ();
+
 		break;
-	case SYS_EXEC:// TODO: B                   /* Switch current process. */
-		f->R.rax = -1;
-		break;
+	}
 	case SYS_WAIT:// TODO: B                   /* Wait for a child process to die. */
 		f->R.rax = -1;
 		break;
