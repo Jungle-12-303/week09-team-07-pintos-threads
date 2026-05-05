@@ -17,6 +17,7 @@
 void syscall_entry (void);
 void syscall_handler (struct intr_frame *);
 static bool user_addr_mapped (const void *uaddr);
+static void validate_user_pointer (void *ptr);
 
 struct lock filesys_lock;
 
@@ -32,6 +33,7 @@ struct lock filesys_lock;
 #define MSR_STAR 0xc0000081         /* Segment selector msr */
 #define MSR_LSTAR 0xc0000082        /* Long mode SYSCALL target */
 #define MSR_SYSCALL_MASK 0xc0000084 /* Mask for the eflags */
+
 
 void
 syscall_init (void) {
@@ -144,12 +146,11 @@ syscall_handler (struct intr_frame *f) {
 	case SYS_WAIT:// TODO: B                   /* Wait for a child process to die. */
 		f->R.rax = -1;
 		break;
-	case SYS_CREATE:// TODO: A                 /* Create a file. */
+	case SYS_CREATE:	                   /* Create a file. */
 		// 값 들어 오는 것 확인
 		// rdi로 제목 데이터 / rsi로 길이 데이터 들어옴.
-		if (!filesys_create((char *)f->R.rdi, f->R.rsi)) {
-			f->R.rax = 0; // 예외처리
-		}
+		validate_user_pointer((char *)f->R.rdi); // 부적절한 포인터가 들어오는 경우 다음 문장이 실행되지 않고 종료됨
+		filesys_create((char *)f->R.rdi, f->R.rsi);
 		break;
 	case SYS_REMOVE:// TODO: A                 /* Delete a file. */
 		f->R.rax = -1;
@@ -167,6 +168,7 @@ syscall_handler (struct intr_frame *f) {
 		int fd = (int) f->R.rdi;
 		const char *buffer = (const char *) f->R.rsi;  /* user buffer address */
 		unsigned size = (unsigned) f->R.rdx;
+
 
 		// 사용자 버퍼 검증 함수 작성 필요
 
@@ -192,4 +194,10 @@ syscall_handler (struct intr_frame *f) {
 		process_exit_with_status (-1); // 프로세스를 비정상 종료
 		break;
 	}
+}
+
+static void
+validate_user_pointer (void *ptr) {
+	if (ptr == NULL)
+		process_exit_with_status (-1); // -1로 비정상 종료
 }
