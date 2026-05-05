@@ -211,13 +211,6 @@ thread_create (const char *name, int priority,
 
 	/* Add to run queue. */
 	thread_unblock (t);
-			
-	
-	/* 우선순위 스케줄링 구현
-	 * 현재 스레드의 우선순위보다 새롭게 생성된 스레드의 우선순위가 높은 경우 교체
-	 */
-	if (t->priority > thread_current()->priority)
-		thread_yield();
 
 	/* 만약 새로 만든 스레드 t가 현재 실행중인 스레드보다 우선순위가 높다면, 현재 스레드가 즉시 CPU를 양보해야 한다. *현재 실행중인 스레드를 중지(yield) */
 	if (t->priority > thread_current()->priority) {
@@ -265,6 +258,11 @@ thread_block (void) {
 	ASSERT (intr_get_level () == INTR_OFF);
 	thread_current ()->status = THREAD_BLOCKED;
 	schedule ();
+}
+
+/* block된 스레드 리스트에 넣는 함수 */
+void insert_sleep(struct thread *t) {
+	list_insert_ordered(&sleep_list, &t->elem, &wakeup_recently, NULL);
 }
 
 /* Transitions a blocked thread T to the ready-to-run state.
@@ -355,21 +353,6 @@ thread_yield (void) {
 
 	do_schedule (THREAD_READY); // THREAD_READY로 상태 전이
 	intr_set_level (old_level); // 비활성화 이전 원래의 인터럽트 상태 (비활성화 or 활성화)로 돌려둠
-}
-
-/* 스레드 대기 상태로 변경하는 함수 */
-void
-thread_sleep (int64_t tick)
-{
-	enum intr_level old_level = intr_disable ();
-
-	struct thread *t = thread_current ();
-	ASSERT (intr_get_level () == INTR_OFF); // 현재 인터럽트 상태가 꺼져있는 경우 통과
-
-	t->wakeup_tick = tick; // 현재 스레드 구조체 일어나야 할 시간에 일어나야 할 절대시간 대입
-	list_insert_ordered (&sleep_list, &t->elem, &wakeup_recently, NULL); // sleep_list에 삽입
-	thread_block ();
-	intr_set_level (old_level); // 이전 인터럽트 상태로 되돌림
 }
 
 
@@ -628,7 +611,6 @@ schedule (void) {
 
 	ASSERT (intr_get_level () == INTR_OFF);
 	ASSERT (curr->status != THREAD_RUNNING);
-	ASSERT (next->status != THREAD_RUNNING); // 스레드 검사 조건 추가
 	ASSERT (is_thread (next));
 	/* Mark us as running. */
 	next->status = THREAD_RUNNING;
@@ -689,3 +671,4 @@ void thread_wakeup(int64_t now_ticks) {
 		thread_unblock(t);
 	}
 }
+

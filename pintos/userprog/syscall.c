@@ -55,7 +55,7 @@ user_addr_mapped (const void *uaddr) {
 	struct thread *cur = thread_current ();
 
 	return uaddr != NULL // 주소가 비어있지 않고
-		&& is_user_vaddr (uaddr) // 사용자 영역이면서 
+		&& is_user_vaddr (uaddr) // 사용자 영역이면서
 		&& cur->pml4 != NULL // 현재 프로세스의 페이지 테이블이 존재하고 (pml4: 사용자 가상 주소를 실제 물리/커널 주소로 변환할 때 쓰는 최상위 페이지 테이블)
 		// &&은 short-circuit이므로, 순차적으로 조건을 검사하다가 위 조건을 만족하지 못하면 아래 조건은 검사하지 않음
 		&& pml4_get_page (cur->pml4, uaddr) != NULL; // 페이지 테이블에 실제로 매핑된 주소이면 True
@@ -110,7 +110,7 @@ user_check_string (const char *uaddr) {
 
 	for (p = uaddr; ; p++) { // 문자열 끝까지 검사
 		user_check_ptr (p); // 특정 문자의 주소가 오류가 있는 경우 프로세스 종료
-		if (*p == '\0') 
+		if (*p == '\0')
 			return;
 	}
 }
