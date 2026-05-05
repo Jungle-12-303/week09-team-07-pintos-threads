@@ -195,7 +195,6 @@ syscall_handler (struct intr_frame *f) {
 		const char *buffer = (const char *) f->R.rsi;  /* user buffer address */
 		unsigned size = (unsigned) f->R.rdx;
 
-
 		// 사용자 버퍼 검증 함수 작성 필요
 
 		if (fd == 1) {
