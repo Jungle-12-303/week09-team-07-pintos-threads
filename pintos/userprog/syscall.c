@@ -172,9 +172,11 @@ syscall_handler (struct intr_frame *f) {
 
 		break;
 	}
-	case SYS_WAIT:// TODO: B                   /* Wait for a child process to die. */
-		f->R.rax = -1;
+	case SYS_WAIT: {                  /* Wait for a child process to die. */
+		tid_t child_tid = (tid_t) f->R.rdi; // 사용자 프로그램이 넘긴 pid 값
+		f->R.rax = process_wait (child_tid); // 자식 종료 상태를 syscall 반환값으로 저장
 		break;
+	}
 	case SYS_CREATE:// TODO: A                 /* Create a file. */
 		// 값 들어 오는 것 확인
 		// rdi로 제목 데이터 / rsi로 길이 데이터 들어옴.

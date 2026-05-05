@@ -26,13 +26,19 @@
 
 static void process_cleanup (void);
 static bool load (char *file_name, struct intr_frame *if_);
-static void initd (void *f_name);
+static void initd (void *aux);
 static void __do_fork (void *);
 
 // thread fork를 위한 구조체
 struct fork_aux {
 	struct thread *parent;
 	struct intr_frame parent_if;
+	struct child_status *child_info;
+};
+
+// fn_copy와 child_status *를 함께 넘기기 위한 작은 aux 구조체
+struct initd_aux {
+	char *file_name;
 	struct child_status *child_info;
 };
 
@@ -217,6 +223,9 @@ process_exit_with_status (int status) {
  * Notice that THIS SHOULD BE CALLED ONCE. */
 tid_t
 process_create_initd (const char *file_name) {
+	struct thread *parent = thread_current ();
+	struct child_status *cs;
+	struct initd_aux *aux;
 	char *fn_copy;
 	char *thread_name;
 	char *space;
@@ -226,6 +235,10 @@ process_create_initd (const char *file_name) {
 	 * Otherwise there's a race between the caller and load(). */
 	/* FILE_NAME의 복사본을 만드세요.
 	 * 그렇지 않으면 호출자와 load() 함수 사이에 경쟁 조건이 발생합니다. */
+
+	process_user_init (parent);
+
+	// fn_copy 준비
 	fn_copy = palloc_get_page (0);
 	if (fn_copy == NULL)
 		return TID_ERROR;
@@ -233,38 +246,88 @@ process_create_initd (const char *file_name) {
 
 	thread_name = palloc_get_page (0);
 	if (thread_name == NULL) {
-		palloc_free_page(fn_copy);
+		palloc_free_page (fn_copy);
 		return TID_ERROR;
 	}
-		
 	strlcpy (thread_name, file_name, PGSIZE);
 
 	// copied_file_name의 첫 번째 인자만 추출하기
-	space = strchr(thread_name, ' ');
+	space = strchr (thread_name, ' ');
 	if (space != NULL) {
 		*space = '\0';
 	}
 
-	/* Create a new thread to execute FILE_NAME. */
-	tid = thread_create (thread_name, PRI_DEFAULT, initd, fn_copy);
-	palloc_free_page (thread_name); // thread_name 메모리 해제
+	/* child_status 생성 및 parent->children에 등록 */
 
-	if (tid == TID_ERROR)
+	// 자식 상태 구조체 할당
+	cs = malloc (sizeof *cs);
+	if (cs == NULL) {
 		palloc_free_page (fn_copy);
+		palloc_free_page (thread_name);
+		return TID_ERROR;
+	}
+
+	/* cs 초기화 */
+	cs->tid = TID_ERROR;
+	cs->exit_status = -1;
+	cs->waited = false;
+	cs->load_done = false;
+	cs->load_success = false;
+	cs->ref_cnt = 2;
+	sema_init (&cs->load_sema, 0);
+	sema_init (&cs->exit_sema, 0);
+
+	aux = malloc (sizeof *aux);
+	if (aux == NULL) {
+		free (cs);
+		palloc_free_page (fn_copy);
+		palloc_free_page (thread_name);
+		return TID_ERROR;
+	}
+
+	// 전달하는 aux 안에 내용물 채우기
+	aux->file_name = fn_copy;
+	aux->child_info = cs; // aux에 child_status 연결
+
+	// 현재 thread의 자식 목록에 넣음
+	list_push_back (&parent->children, &cs->elem);
+
+	/* Create a new thread to execute FILE_NAME. */
+	tid = thread_create (thread_name, PRI_DEFAULT, initd, aux);
+	palloc_free_page (thread_name); // thread_name 메모리 해제
+	// (참고) aux 메모리는 initd() 안에서 file_name, child_info를 꺼낸 뒤 해제
+
+	if (tid == TID_ERROR) {
+		list_remove (&cs->elem);
+		free (aux);
+		free (cs);
+		palloc_free_page (fn_copy);
+		return TID_ERROR;
+	}
+
+	cs->tid = tid; // 자식 스레드 아이디에 새로 생성한 tid 할당
+
 	return tid;
 }
 
 /* A thread function that launches first user process. */
 static void
-initd (void *f_name) {
+initd (void *aux) {
 #ifdef VM
 	supplemental_page_table_init (&thread_current ()->spt);
 #endif
 
+	struct initd_aux *_aux = aux;
+	char *f_name = _aux->file_name;
+
+	/* 현재 thread의 종료 상태를 부모에게 알릴 child_status를 연결한다. */
+	thread_current ()->child_info = _aux->child_info;
+	free (_aux);
+
 	process_init ();
 
 	if (process_exec (f_name) < 0)
-		PANIC("Fail to launch initd\n");
+		PANIC ("Fail to launch initd\n");
 	NOT_REACHED ();
 }
 
@@ -322,7 +385,6 @@ process_fork (const char *name, struct intr_frame *if_) {
 	sema_down (&cs->load_sema);
 	if (!cs->load_success) {
 		list_remove (&cs->elem);
-		child_status_release (cs);
 		child_status_release (cs);
 		return TID_ERROR;
 	}
@@ -501,24 +563,43 @@ process_exec (void *f_name) {
  * 이 함수는 문제 2-2에서 구현될 예정입니다. 현재는
  * 아무런 동작도 하지 않습니다. */
 int
-process_wait (tid_t child_tid UNUSED) {
+process_wait (tid_t child_tid) {
 	/* XXX: Hint) The pintos exit if process_wait (initd), we recommend you
 	 * XXX:       to add infinite loop here before
 	 * XXX:       implementing the process_wait. */
 
-	// 커널 main thread가 살아있으면서 일정 시간동안 계속 잠들게 하기 위한 임시 무한루프 코드
-	for (int i = 0; i < 30; i++) {
-		timer_sleep (100);
+	struct child_status *cs;
+	int status;
+
+	cs = process_find_child (child_tid);
+	if (cs == NULL) {
+		return -1;
 	}
 
-	return -1;
+	// 이미 한 번 wait() 한 자식이면, 다시 기다릴 수 없으므로 실패 처리
+	if (cs->waited) {
+		return -1;
+	}
+
+	cs->waited = true;
+
+	/*  자식이 아직 종료되지 않은 동안 부모는 여기서 멈춤.
+	exit_sema는 부모와 자식이 공유하는 child_status 안에 존재. */
+	sema_down (&cs->exit_sema); // 부모는 cs->exit_sema 값이 0이면 잠들고, 1이면 깨어남.
+
+	status = cs->exit_status; // 자식의 종료상태를 cs 해제 전에 복사
+
+	list_remove (&cs->elem); // 부모의 children 리스트에서 자식의 child_status를 제거
+	child_status_release (cs);
+
+	return status;
 }
 
 /* Exit the process. This function is called by thread_exit (). */
 void
 process_exit (void) {
 	struct thread *curr = thread_current ();
-	printf ("%s: exit(%d)\n", curr->name, curr->exit_status); 
+	printf ("%s: exit(%d)\n", curr->name, curr->exit_status);
 	process_close_all_files ();
 	if (curr->exec_file != NULL) {
 		file_allow_write (curr->exec_file);
@@ -530,6 +611,8 @@ process_exit (void) {
 	if (curr->child_info != NULL) {
 		curr->child_info->exit_status = curr->exit_status;
 		sema_up (&curr->child_info->exit_sema);
+		child_status_release (curr->child_info); // 자식 종료 시 자식 쪽 참조를 내려야 함.
+		curr->child_info = NULL;
 	}
 
 	process_cleanup ();
