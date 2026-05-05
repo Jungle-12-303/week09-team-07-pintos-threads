@@ -209,6 +209,19 @@ child_status_release (struct child_status *cs) {
 		free (cs);
 }
 
+// 현재 프로세스가 부모로서 들고 있던 자식 목록을 비우고, 각 자식 상태에 대한 부모측의 참조를 해제하는 헬퍼 함수
+static void
+process_release_children (struct thread *t) { // t는 종료 중인 현재 thread
+	if (t == NULL || !process_list_initialized (&t->children))
+		return;
+
+	while (!list_empty (&t->children)) {
+		struct list_elem *e = list_pop_front (&t->children); // children 리스트에서 앞에서부터 제거
+		struct child_status *cs = list_entry (e, struct child_status, elem);
+		child_status_release (cs); // child_status에 대한 부모의 참조 카운트를 1 줄이기
+	}
+}
+
 void
 process_exit_with_status (int status) {
 	thread_current ()->exit_status = status;
@@ -603,6 +616,9 @@ process_exit (void) {
 		file_close (curr->exec_file);
 		curr->exec_file = NULL;
 	}
+
+	/* wait하지 않은 자식들의 parent-side child_status 참조 해제 */
+	process_release_children (curr);
 
 	// 부모가 wait()에서 받을 수 있도록 현재 프로세스의 종료 상태를 기록
 	if (curr->child_info != NULL) {
