@@ -188,11 +188,15 @@ void syscall_handler(struct intr_frame *f)
 		f->R.rax = -1;
 		break;
 	case SYS_OPEN: // TODO: A                   /* Open a file. */
-		int fd = process_add_file(filesys_open((char *)f->R.rdi));
-		if (fd != -1)
-		{
-			f->R.rax = fd;
-		}
+		int fd;
+		char *file_name;
+		struct file *file;
+
+		file_name = (char *)f->R.rdi;
+		file = filesys_open(file_name);
+		fd = process_add_file(file);
+
+		f->R.rax = fd;
 		break;
 	case SYS_FILESIZE: // TODO: A               /* Obtain a file's size. */
 		f->R.rax = -1;
