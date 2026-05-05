@@ -148,9 +148,14 @@ syscall_handler (struct intr_frame *f) {
 	case SYS_EXIT:                   /* Terminate this process. */
 		process_exit_with_status((int) f->R.rdi);
 		break;
-	case SYS_FORK:// TODO: B                   /* Clone current process. */
-		f->R.rax = -1;
-		break;	
+	// 현재 실행중인 사용자 process를 복사해서 자식 process 생성
+	case SYS_FORK: {                   /* Clone current process. */
+		const char *thread_name = (const char *) f->R.rdi; // fork(const char *thread_name)의 첫 번째 인자
+
+		user_check_string (thread_name);
+		f->R.rax = process_fork (thread_name, f); // fork() syscall 실패시 부모에게 -1 반환, 성공시 child tid 반환
+		break;
+	}
 	// 이미 실행 중인 user process가 exec()를 요청한 상황
 	case SYS_EXEC: {                   /* Switch current process. */
 		const char *cmd_line = (const char *) f->R.rdi; // exec(const char *file)의 첫 번째 인자
@@ -167,9 +172,11 @@ syscall_handler (struct intr_frame *f) {
 
 		break;
 	}
-	case SYS_WAIT:// TODO: B                   /* Wait for a child process to die. */
-		f->R.rax = -1;
+	case SYS_WAIT: {                  /* Wait for a child process to die. */
+		tid_t child_tid = (tid_t) f->R.rdi; // 사용자 프로그램이 넘긴 pid 값
+		f->R.rax = process_wait (child_tid); // 자식 종료 상태를 syscall 반환값으로 저장
 		break;
+	}
 	case SYS_CREATE:// TODO: A                 /* Create a file. */
 		// 값 들어 오는 것 확인
 		// rdi로 제목 데이터 / rsi로 길이 데이터 들어옴.
