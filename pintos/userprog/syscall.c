@@ -13,6 +13,7 @@
 #include "userprog/process.h"
 #include "threads/flags.h"
 #include "intrinsic.h"
+#include "filesys/filesys.h"
 
 void syscall_entry(void);
 void syscall_handler(struct intr_frame *);
@@ -190,7 +191,11 @@ void syscall_handler(struct intr_frame *f)
 	case SYS_OPEN: // TODO: A                   /* Open a file. */
 		int fd;
 		char *file_name;
-		struct file *file;
+		struct file *file = NULL;
+		// if (file == NULL)
+		// {
+		// 	process_exit_with_status(-1);
+		// }
 
 		file_name = (char *)f->R.rdi;
 		file = filesys_open(file_name);
