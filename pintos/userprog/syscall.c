@@ -14,6 +14,7 @@
 #include "threads/flags.h"
 #include "intrinsic.h"
 #include "filesys/filesys.h"
+#include "filesys/file.h"
 
 void syscall_entry(void);
 void syscall_handler(struct intr_frame *);
@@ -147,6 +148,7 @@ user_strdup(const char *uaddr)
 /* 커널이 syscall 요청을 받아 실제로 처리하는 dispatcher */
 void syscall_handler(struct intr_frame *f)
 {
+	int fd = 0;
 	// x86-64 호출 규약에서 함수 반환값은 RAX 레지스터에 두어야 합니다. 반환값이 있는 시스템 콜은 struct intr_frame의 rax 멤버를 수정해 이를 구현할 수 있습니다.
 
 	switch (f->R.rax)
@@ -212,14 +214,50 @@ void syscall_handler(struct intr_frame *f)
 		break;
 	}
 	case SYS_FILESIZE: /* Obtain a file's size. */
-		f->R.rax = -1;
+		fd = (int)f->R.rdi;
+
+		f->R.rax = file_length(process_get_file(fd));
 		break;
 	case SYS_READ: // TODO: A                   /* Read from a file. */
+		fd = (int)f->R.rdi;
+		void *buffer = (void *)f->R.rsi;
+		unsigned size = (unsigned)f->R.rdx;
+		struct file *file;
+
 		user_check_read(f->R.rdi, (size_t)f->R.rsi);
+
+		// fd 0일 때 키보드 입력값으로 대체.
+		if (fd == 0)
+		{
+			char *buf = buffer;
+
+			for (int i = 0; i < size; i++)
+				buf[i] = input_getc();
+
+			f->R.rax = size;
+		} // 파일을 특정했을 때
+		else if (fd >= 2)
+		{
+			file = process_get_file(fd);
+
+			if (file == NULL)
+			{
+				process_exit_with_status(-1);
+			}
+			else
+			{
+				// file_read로 읽어서 값 반환
+				f->R.rax = file_read(file, buffer, size);
+			}
+		}
+		else
+		{
+			process_exit_with_status(-1);
+		}
 		break;
 	case SYS_WRITE:
 	{ // TODO: A               /* Write to a file. */
-		int fd = (int)f->R.rdi;
+		fd = (int)f->R.rdi;
 		const char *buffer = (const char *)f->R.rsi; /* user buffer address */
 		unsigned size = (unsigned)f->R.rdx;
 
