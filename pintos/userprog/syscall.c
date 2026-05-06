@@ -227,7 +227,7 @@ void syscall_handler(struct intr_frame *f)
 		unsigned size = (unsigned)f->R.rdx;
 		struct file *file;
 
-		user_check_write(buffer, size);
+		user_check_read(buffer, size);
 
 		// fd 0일 때 키보드 입력값으로 대체.
 		if (fd == 0)
@@ -277,12 +277,17 @@ void syscall_handler(struct intr_frame *f)
 		{
 			// 열어둔 파일에 값을 입력한다는 의미니까
 			file = process_get_file(fd);
+			if (file == NULL)
+			{
+				f->R.rax = -1;
+				break;
+			}
 			f->R.rax = file_write(file, buffer, size);
 			// file_write(struct file * file, const void *buffer, off_t size)
 		}
 		else
 		{
-			process_exit_with_status(-1);
+			f->R.rax = -1;
 		}
 		break;
 	}
