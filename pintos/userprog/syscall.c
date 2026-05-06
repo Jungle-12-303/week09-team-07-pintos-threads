@@ -195,8 +195,11 @@ void syscall_handler(struct intr_frame *f)
 	case SYS_CREATE: // TODO: A                 /* Create a file. */
 		// 값 들어 오는 것 확인
 		// rdi로 제목 데이터 / rsi로 길이 데이터 들어옴.
-		// user_check_string((void *)f->R.rdi); // 부적절한 문장이 들어오는 경우 다음 문장이 실행되지 않고 종료됨
-		filesys_create((char *)f->R.rdi, f->R.rsi);
+		// file 먼저 찾아보고 있으면 에러 반환
+		char *file = (char *)f->R.rdi;
+
+		user_check_string(file);
+		f->R.rax = filesys_create((char *)f->R.rdi, f->R.rsi);
 		break;
 	case SYS_REMOVE:					  /* Delete a file. */
 		user_check_ptr((void *)f->R.rdi); // 제거하려는 파일의 포인터가 올바르지 않은 경우 오류
