@@ -98,6 +98,7 @@ user_check_read (const void *uaddr, size_t size) {
 /* 커널이 user buffer에 써야 할 때 검증
    read(fd, buffer, size)에서 buffer 검증 */
 void
+
 user_check_write (void *uaddr, size_t size) {
 	user_check_read (uaddr, size);
 }
@@ -184,7 +185,7 @@ syscall_handler (struct intr_frame *f) {
 	case SYS_CREATE:// TODO: A                 /* Create a file. */
 		// 값 들어 오는 것 확인
 		// rdi로 제목 데이터 / rsi로 길이 데이터 들어옴.
-		user_check_write ((void *)f->R.rdi, (size_t)f->R.rsi); // 부적절한 포인터가 들어오는 경우 다음 문장이 실행되지 않고 종료됨
+		user_check_string ((void *)f->R.rdi); // 부적절한 문장이 들어오는 경우 다음 문장이 실행되지 않고 종료됨
 		filesys_create((char *)f->R.rdi, f->R.rsi);
 		break;
 	case SYS_REMOVE:                 	   /* Delete a file. */
@@ -206,7 +207,7 @@ syscall_handler (struct intr_frame *f) {
 		const char *buffer = (const char *) f->R.rsi;  /* user buffer address */
 		unsigned size = (unsigned) f->R.rdx;
 
-		user_check_write (buffer, size);
+		user_check_read (buffer, size);
 
 		if (fd == 1) {
 			putbuf (buffer, size);
