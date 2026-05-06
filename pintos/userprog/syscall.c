@@ -204,6 +204,7 @@ void syscall_handler(struct intr_frame *f)
 		break;
 	case SYS_OPEN:
 	{
+		// f->R.rax = filesys_open((char *)f->R.rdi);
 		const char *file_name = (const char *)f->R.rdi;
 		struct file *file;
 
