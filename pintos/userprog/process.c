@@ -43,6 +43,10 @@ struct initd_aux {
 	struct child_status *child_info;
 };
 
+/* 프로세스별 fd table의 한 항목.
+   fd는 user program이 사용하는 정수 file descriptor이고,
+   file은 실제 열린 파일 객체를 가리킨다.
+   elem은 thread_current()->fd_table 리스트에 연결하기 위한 list element다. */
 struct fd_entry {
 	int fd;
 	struct file *file;
@@ -73,6 +77,8 @@ process_user_init (struct thread *t) {
 		t->next_fd = 2;
 }
 
+/* thread 구조체 안의 list 필드가 list_init()을 거쳤는지 확인한다.
+   초기화되지 않은 fd_table/children에 list 연산을 수행하지 않기 위한 방어 helper다. */
 static bool
 process_list_initialized (struct list *list) {
 	return list->head.next != NULL && list->tail.prev != NULL;
@@ -86,6 +92,8 @@ process_add_file (struct file *file) {
 	if (file == NULL)
 		return -1;
 
+	/* fd 0(stdin), fd 1(stdout)은 syscall 쪽에서 특별 취급하므로
+	   일반 파일 fd는 현재 프로세스의 next_fd 값인 2부터 할당한다. */
 	process_user_init (cur);
 	entry = malloc (sizeof *entry);
 	if (entry == NULL)
@@ -115,6 +123,8 @@ process_find_fd_entry (struct thread *t, int fd) {
 
 struct file *
 process_get_file (int fd) {
+	/* 현재 프로세스 fd table에서 일반 파일 fd에 대응하는 struct file을 찾는다.
+	   stdin/stdout 같은 표준 fd 처리는 syscall 계층에서 분기한다. */
 	struct fd_entry *entry = process_find_fd_entry (thread_current (), fd);
 	return entry != NULL ? entry->file : NULL;
 }
@@ -126,6 +136,7 @@ process_close_file (int fd) {
 	if (entry == NULL)
 		return false;
 
+	/* fd table에서 제거한 뒤 file을 닫아 이 프로세스가 가진 fd 소유권을 끝낸다. */
 	list_remove (&entry->elem);
 	file_close (entry->file);
 	free (entry);
@@ -142,6 +153,7 @@ process_close_files (struct thread *t) {
 	if (t == NULL || !process_list_initialized (&t->fd_table))
 		return;
 
+	/* 프로세스 종료 시 명시적으로 close하지 않은 fd들을 모두 정리한다. */
 	while (!list_empty (&t->fd_table)) {
 		struct list_elem *e = list_pop_front (&t->fd_table);
 		struct fd_entry *entry = list_entry (e, struct fd_entry, elem);
@@ -157,6 +169,8 @@ process_duplicate_fds (struct thread *dst, struct thread *src) {
 	ASSERT (dst != NULL);
 	ASSERT (src != NULL);
 
+	/* fork된 child는 parent와 같은 fd 번호를 유지해야 한다.
+	   file_duplicate()은 file 위치와 deny_write 상태를 포함한 새 file 객체를 만든다. */
 	process_user_init (dst);
 	if (!process_list_initialized (&src->fd_table))
 		return true;
@@ -192,6 +206,7 @@ process_find_child (tid_t tid) {
 	if (!process_list_initialized (&cur->children))
 		return NULL;
 
+	/* wait()는 직접 자식에게만 허용되므로 현재 thread의 children 목록만 탐색한다. */
 	for (e = list_begin (&cur->children); e != list_end (&cur->children);
 	     e = list_next (e)) {
 		struct child_status *cs = list_entry (e, struct child_status, elem);
@@ -206,6 +221,8 @@ child_status_release (struct child_status *cs) {
 	if (cs == NULL)
 		return;
 
+	/* child_status는 부모와 자식이 함께 참조한다.
+	   부모가 wait하거나 종료할 때, 자식이 exit할 때 각각 참조를 내려 0이 되면 해제한다. */
 	cs->ref_cnt--;
 	if (cs->ref_cnt <= 0)
 		free (cs);
@@ -213,7 +230,8 @@ child_status_release (struct child_status *cs) {
 
 /* 실행 파일에 걸어 둔 write deny를 해제하고 파일을 닫는다.
    process_exec()에서 새 실행 파일로 교체할 때와 process_exit()에서 종료할 때
-   같은 정리 흐름을 재사용하기 위한 helper 함수 */
+   같은 정리 흐름을 재사용하기 위한 helper 함수.
+   exec_file은 rox를 위해 load 성공 후 닫지 않고 보관한 실행 파일이다. */
 static void
 process_close_exec_file (struct thread *t) {
 	if (t == NULL || t->exec_file == NULL) {
@@ -234,6 +252,8 @@ process_release_children (struct thread *t) { // t는 종료 중인 현재 threa
 	if (t == NULL || !process_list_initialized (&t->children))
 		return;
 
+	/* 부모가 먼저 종료되면 더 이상 wait할 수 없으므로 parent-side 참조를 모두 내려놓는다.
+	   자식이 아직 살아 있으면 자식 쪽 참조가 남아 있어 child_status는 유지된다. */
 	while (!list_empty (&t->children)) {
 		struct list_elem *e = list_pop_front (&t->children); // children 리스트에서 앞에서부터 제거
 		struct child_status *cs = list_entry (e, struct child_status, elem);
@@ -267,6 +287,9 @@ process_create_initd (const char *file_name) {
 	 * Otherwise there's a race between the caller and load(). */
 	/* FILE_NAME의 복사본을 만드세요.
 	 * 그렇지 않으면 호출자와 load() 함수 사이에 경쟁 조건이 발생합니다. */
+	/* fn_copy는 initd가 process_exec()에 넘길 전체 command line이고,
+	   thread_name은 스레드 이름으로 쓸 argv[0]만 따로 잘라낸 사본이다.
+	   child_status는 initd도 부모가 wait할 수 있는 자식으로 관리하기 위해 만든다. */
 
 	process_user_init (parent);
 
@@ -370,6 +393,8 @@ process_fork (const char *name, struct intr_frame *if_) {
 	struct thread *parent = thread_current (); // 현재 스레드가 부모 스레드가 됨
 
 	/* process_fork()에서 parent intr_frame을 child에게 넘길 수 있게 aux 구조체 할당.*/
+	/* fork_aux는 child thread가 시작된 뒤 parent의 실행 문맥과 child_status를
+	   이어받을 수 있게 잠시 사용하는 전달 객체다. */
 	struct fork_aux *aux = malloc (sizeof *aux);
 	if (aux == NULL) {
 		return TID_ERROR;
@@ -413,6 +438,8 @@ process_fork (const char *name, struct intr_frame *if_) {
 
 	// 부모, 자식의 tid 동기화
 	cs->tid = tid;
+	/* parent는 child가 주소 공간과 fd table 복제를 끝내기 전까지 fork()를 반환하면 안 된다.
+	   load_sema/load_success는 exec의 load 결과뿐 아니라 fork 준비 결과 동기화에도 사용한다. */
 	sema_down (&cs->load_sema);
 	if (!cs->load_success) {
 		list_remove (&cs->elem);
@@ -434,7 +461,7 @@ duplicate_pte (uint64_t *pte, void *va, void *aux) {
 	void *newpage;
 	bool writable;
 
-	/* 1. TODO: If the parent_page is kernel page, then return immediately. */
+	/* 1. If the parent_page is kernel page, then return immediately. */
 	if (is_kern_pte (pte)) {
 		return true;
 	}
@@ -492,6 +519,7 @@ __do_fork (void *aux) {
 	/* fork()에서는 부모와 자식이 거의 같은 실행 상태에서 이어서 실행되어야 함.
 	    그래서 부모의 intr_frame을 자식 쪽 로컬 변수 if_에 복사 */
 	memcpy (&if_, parent_if, sizeof (struct intr_frame));
+	/* child 쪽 fork() 반환값은 0이어야 하므로 복사한 intr_frame의 rax만 덮어쓴다. */
 	if_.R.rax = 0; // 자식은 fork()의 반환값이 0이어야 함
 
 	// 사용한 메모리 해제
@@ -531,6 +559,7 @@ __do_fork (void *aux) {
 
 	/* 성공/실패 결과를 child_status에 기록. 부모에게 fork 준비 완료를 알림 */
 done:
+	/* 이 신호를 받은 parent가 process_fork()에서 child tid 또는 TID_ERROR를 반환한다. */
 	current->child_info->load_success = succ;
 	current->child_info->load_done = true;
 	sema_up (&current->child_info->load_sema); // sema_up()으로 부모 깨움
@@ -562,6 +591,8 @@ process_exec (void *f_name) {
 	/* 기존 실행 파일 정리 */
 	process_close_exec_file (cur);
 
+	/* 기존 사용자 주소 공간을 제거한 뒤 새 ELF 이미지를 같은 thread에 적재한다.
+	   성공하면 do_iret()로 user mode에 진입하므로 이 함수는 호출자에게 돌아오지 않는다. */
 	process_cleanup ();
 
 	/* And then load the binary */
@@ -583,17 +614,14 @@ process_exec (void *f_name) {
  * child of the calling process, or if process_wait() has already
  * been successfully called for the given TID, returns -1
  * immediately, without waiting.
- *
- * This function will be implemented in problem 2-2.  For now, it
- * does nothing. */
+ */
 /* 스레드 TID가 종료될 때까지 기다렸다가 종료 상태를 반환합니다.
  * 커널에 의해 종료된 경우(예: 예외로 인해 강제 종료된 경우)
  * -1을 반환합니다. TID가 유효하지 않거나 호출 프로세스의 자식이 아니거나,
  * process_wait()가 이미 해당 TID에 대해 성공적으로 호출된 경우,
  * 대기하지 않고 즉시 -1을 반환합니다.
- *
- * 이 함수는 문제 2-2에서 구현될 예정입니다. 현재는
- * 아무런 동작도 하지 않습니다. */
+ */
+
 int
 process_wait (tid_t child_tid) {
 	/* XXX: Hint) The pintos exit if process_wait (initd), we recommend you
@@ -603,6 +631,7 @@ process_wait (tid_t child_tid) {
 	struct child_status *cs;
 	int status;
 
+	/* 직접 자식이 아니면 기다릴 수 없다. */
 	cs = process_find_child (child_tid);
 	if (cs == NULL) {
 		return -1;
@@ -617,10 +646,13 @@ process_wait (tid_t child_tid) {
 
 	/*  자식이 아직 종료되지 않은 동안 부모는 여기서 멈춤.
 	exit_sema는 부모와 자식이 공유하는 child_status 안에 존재. */
+	/* 자식이 이미 종료된 경우 exit_sema가 올라가 있으므로 즉시 통과하고,
+	   아직 실행 중이면 process_exit()에서 exit_sema를 올릴 때까지 대기한다. */
 	sema_down (&cs->exit_sema); // 부모는 cs->exit_sema 값이 0이면 잠들고, 1이면 깨어남.
 
 	status = cs->exit_status; // 자식의 종료상태를 cs 해제 전에 복사
 
+	/* wait은 한 번만 성공할 수 있으므로 회수한 child_status를 children 목록에서 제거한다. */
 	list_remove (&cs->elem); // 부모의 children 리스트에서 자식의 child_status를 제거
 	child_status_release (cs);
 
@@ -910,11 +942,14 @@ load (char *file_name, struct intr_frame *if_) {
 	success = true;
 
 	// rox 구현: 파일 로드가 성공한 경우에는 닫지 않고 현재 thread에 보관
+	/* 실행 중인 파일에 대한 쓰기를 막기 위해 deny_write를 걸고 thread에 보관한다.
+	   이 file은 process_exec()로 다른 프로그램을 실행하거나 process_exit()할 때 닫힌다. */
 	file_deny_write (file);
 	thread_current ()->exec_file = file;
 
 done:
 	/* We arrive here whether the load is successful or not. */
+	/* load 실패 시에는 실행 파일을 thread에 보관하지 않았으므로 여기서 닫아 누수를 막는다. */
 	if (!success && file != NULL) {
 		file_close (file);
 	}
