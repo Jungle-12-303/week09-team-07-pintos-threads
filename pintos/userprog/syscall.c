@@ -227,7 +227,7 @@ void syscall_handler(struct intr_frame *f)
 		unsigned size = (unsigned)f->R.rdx;
 		struct file *file;
 
-		user_check_read(f->R.rdi, (size_t)f->R.rsi);
+		user_check_write(buffer, size);
 
 		// fd 0일 때 키보드 입력값으로 대체.
 		if (fd == 0)
