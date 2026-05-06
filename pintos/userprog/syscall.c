@@ -34,6 +34,7 @@ struct lock filesys_lock;
 #define MSR_LSTAR 0xc0000082        /* Long mode SYSCALL target */
 #define MSR_SYSCALL_MASK 0xc0000084 /* Mask for the eflags */
 
+
 void
 syscall_init (void) {
 	lock_init (&filesys_lock);
@@ -54,10 +55,11 @@ static bool
 user_addr_mapped (const void *uaddr) {
 	struct thread *cur = thread_current ();
 
-	return uaddr != NULL
-		&& is_user_vaddr (uaddr)
-		&& cur->pml4 != NULL
-		&& pml4_get_page (cur->pml4, uaddr) != NULL;
+	return uaddr != NULL // 주소가 비어있지 않고
+		&& is_user_vaddr (uaddr) // 사용자 영역이면서
+		&& cur->pml4 != NULL // 현재 프로세스의 페이지 테이블이 존재하고 (pml4: 사용자 가상 주소를 실제 물리/커널 주소로 변환할 때 쓰는 최상위 페이지 테이블)
+		// &&은 short-circuit이므로, 순차적으로 조건을 검사하다가 위 조건을 만족하지 못하면 아래 조건은 검사하지 않음
+		&& pml4_get_page (cur->pml4, uaddr) != NULL; // 페이지 테이블에 실제로 매핑된 주소이면 True
 }
 
 /* 주소가 유효하지 않으면 현재 process를 exit(-1)하는 공개 검증 함수 */
@@ -82,20 +84,22 @@ user_check_read (const void *uaddr, size_t size) {
 	if (uaddr == NULL)
 		process_exit_with_status (-1);
 
-	start = (uint64_t) uaddr;
+	start = (uint64_t)uaddr;
 	last = start + size - 1;
-	if (last < start)
+
+	if (last < start) // 오버플로우 검사
 		process_exit_with_status (-1);
 
-	for (page = (uint64_t) pg_round_down ((void *) start);
-			page <= (uint64_t) pg_round_down ((void *) last);
-			page += PGSIZE)
-		user_check_ptr ((const void *) page);
+	for (page = (uint64_t)pg_round_down ((void *)start); // 버퍼의 시작 주소가 속한 페이지의 시작 위치
+	     page <= (uint64_t)pg_round_down ((void *)last); // 버퍼의 마지막 주소가 속한 페이지의 시작 위치
+	     page += PGSIZE) // 페이지 사이즈만큼 증가
+		user_check_ptr ((const void *)page); // pml4_get_page()를 통해 page 주소가 현재 스레드의 pml4에서 찾을 수 있는지 확인, 찾을 수 없다면 프로세스 종료 (-1)
 }
 
 /* 커널이 user buffer에 써야 할 때 검증
    read(fd, buffer, size)에서 buffer 검증 */
 void
+
 user_check_write (void *uaddr, size_t size) {
 	user_check_read (uaddr, size);
 }
@@ -106,8 +110,8 @@ void
 user_check_string (const char *uaddr) {
 	const char *p;
 
-	for (p = uaddr; ; p++) {
-		user_check_ptr (p);
+	for (p = uaddr; ; p++) { // 문자열 끝까지 검사
+		user_check_ptr (p); // 특정 문자의 주소가 오류가 있는 경우 프로세스 종료
 		if (*p == '\0')
 			return;
 	}
@@ -124,13 +128,14 @@ user_strdup (const char *uaddr) {
 	if (copy == NULL)
 		process_exit_with_status (-1);
 
-	for (i = 0; i < PGSIZE; i++) {
+	for (i = 0; i < PGSIZE; i++) { // 안전하게 한 글자씩 검사하면서 복사
 		user_check_ptr (uaddr + i);
 		copy[i] = uaddr[i];
 		if (copy[i] == '\0')
 			return copy;
 	}
 
+	// copy를 반환하지 않고 종료됐다면 오류가 있는 것이므로, 할당받은 페이지 반환 후 오류 종료
 	palloc_free_page (copy);
 	process_exit_with_status (-1);
 }
@@ -181,12 +186,12 @@ syscall_handler (struct intr_frame *f) {
 	case SYS_CREATE:// TODO: A                 /* Create a file. */
 		// 값 들어 오는 것 확인
 		// rdi로 제목 데이터 / rsi로 길이 데이터 들어옴.
-		if (!filesys_create((char *)f->R.rdi, f->R.rsi)) {
-			f->R.rax = 0; // 예외처리
-		}
+		user_check_string ((void *)f->R.rdi); // 부적절한 문장이 들어오는 경우 다음 문장이 실행되지 않고 종료됨
+		filesys_create((char *)f->R.rdi, f->R.rsi);
 		break;
-	case SYS_REMOVE:// TODO: A                 /* Delete a file. */
-		f->R.rax = -1;
+	case SYS_REMOVE:                 	   /* Delete a file. */
+		user_check_ptr ((void *)f->R.rdi); // 제거하려는 파일의 포인터가 올바르지 않은 경우 오류
+		// TODO: A
 		break;
 	case SYS_OPEN:// TODO: A                   /* Open a file. */
 	{
@@ -202,14 +207,14 @@ syscall_handler (struct intr_frame *f) {
 		f->R.rax = -1;
 		break;
 	case SYS_READ:// TODO: A                   /* Read from a file. */
-		f->R.rax = -1;
+		user_check_read (f->R.rdi, (size_t) f->R.rsi);
 		break;
 	case SYS_WRITE: { // TODO: A               /* Write to a file. */
 		int fd = (int) f->R.rdi;
 		const char *buffer = (const char *) f->R.rsi;  /* user buffer address */
 		unsigned size = (unsigned) f->R.rdx;
 
-		// 사용자 버퍼 검증 함수 작성 필요
+		user_check_read (buffer, size);
 
 		if (fd == 1) {
 			putbuf (buffer, size);
@@ -230,7 +235,7 @@ syscall_handler (struct intr_frame *f) {
 		f->R.rax = -1;
 		break;
 	default:
-		process_exit_with_status (-1); // 프로세스를 비정상 종료
+		process_exit_with_status (-1); // 프로세스 비정상 종료
 		break;
 	}
 }
