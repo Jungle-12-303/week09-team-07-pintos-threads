@@ -7,6 +7,7 @@
 #include <string.h>
 #include "userprog/gdt.h"
 #include "userprog/tss.h"
+#include "userprog/syscall.h"
 #include "filesys/directory.h"
 #include "filesys/file.h"
 #include "filesys/filesys.h"
@@ -51,6 +52,7 @@ struct fd_entry {
 static bool process_list_initialized (struct list *list);
 static struct fd_entry *process_find_fd_entry (struct thread *t, int fd);
 static void process_close_files (struct thread *t);
+static void process_close_exec_file (struct thread *t);
 
 /* General process initializer for initd and other process. */
 static void
@@ -207,6 +209,23 @@ child_status_release (struct child_status *cs) {
 	cs->ref_cnt--;
 	if (cs->ref_cnt <= 0)
 		free (cs);
+}
+
+/* 실행 파일에 걸어 둔 write deny를 해제하고 파일을 닫는다.
+   process_exec()에서 새 실행 파일로 교체할 때와 process_exit()에서 종료할 때
+   같은 정리 흐름을 재사용하기 위한 helper 함수 */
+static void
+process_close_exec_file (struct thread *t) {
+	if (t == NULL || t->exec_file == NULL) {
+		return;
+	}
+
+	lock_acquire (&filesys_lock);
+	file_allow_write (t->exec_file);
+	file_close (t->exec_file);
+	lock_release (&filesys_lock);
+
+	t->exec_file = NULL;
 }
 
 // 현재 프로세스가 부모로서 들고 있던 자식 목록을 비우고, 각 자식 상태에 대한 부모측의 참조를 해제하는 헬퍼 함수
@@ -540,12 +559,8 @@ process_exec (void *f_name) {
 	_if.cs = SEL_UCSEG;
 	_if.eflags = FLAG_IF | FLAG_MBS;
 
-	/* We first kill the current context */
-	if (cur->exec_file != NULL) {
-		file_allow_write (cur->exec_file);
-		file_close (cur->exec_file);
-		cur->exec_file = NULL;
-	}
+	/* 기존 실행 파일 정리 */
+	process_close_exec_file (cur);
 
 	process_cleanup ();
 
@@ -618,11 +633,7 @@ process_exit (void) {
 	struct thread *curr = thread_current ();
 	printf ("%s: exit(%d)\n", curr->name, curr->exit_status);
 	process_close_all_files ();
-	if (curr->exec_file != NULL) {
-		file_allow_write (curr->exec_file);
-		file_close (curr->exec_file);
-		curr->exec_file = NULL;
-	}
+	process_close_exec_file (curr);
 
 	/* wait하지 않은 자식들의 parent-side child_status 참조 해제 */
 	process_release_children (curr);
