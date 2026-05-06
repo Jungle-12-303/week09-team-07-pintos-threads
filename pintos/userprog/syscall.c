@@ -13,6 +13,7 @@
 #include "userprog/process.h"
 #include "threads/flags.h"
 #include "intrinsic.h"
+#include "filesys/filesys.h"
 
 void syscall_entry (void);
 void syscall_handler (struct intr_frame *);
@@ -192,10 +193,16 @@ syscall_handler (struct intr_frame *f) {
 		user_check_ptr ((void *)f->R.rdi); // 제거하려는 파일의 포인터가 올바르지 않은 경우 오류
 		// TODO: A
 		break;
-	case SYS_OPEN:                             /* Open a file. */
-		user_check_ptr((void *)f->R.rdi);
-		// TODO: A
+	case SYS_OPEN:// TODO: A                   /* Open a file. */
+	{
+		const char *file_name = (const char *) f->R.rdi;
+		struct file *file;
+
+		user_check_string (file_name);
+		file = filesys_open (file_name);
+		f->R.rax = process_add_file (file);
 		break;
+	}
 	case SYS_FILESIZE:// TODO: A               /* Obtain a file's size. */
 		f->R.rax = -1;
 		break;
