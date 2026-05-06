@@ -148,7 +148,6 @@ user_strdup(const char *uaddr)
 /* 커널이 syscall 요청을 받아 실제로 처리하는 dispatcher */
 void syscall_handler(struct intr_frame *f)
 {
-	int fd = 0;
 	// x86-64 호출 규약에서 함수 반환값은 RAX 레지스터에 두어야 합니다. 반환값이 있는 시스템 콜은 struct intr_frame의 rax 멤버를 수정해 이를 구현할 수 있습니다.
 
 	switch (f->R.rax)
@@ -196,7 +195,7 @@ void syscall_handler(struct intr_frame *f)
 	case SYS_CREATE: // TODO: A                 /* Create a file. */
 		// 값 들어 오는 것 확인
 		// rdi로 제목 데이터 / rsi로 길이 데이터 들어옴.
-		user_check_string((void *)f->R.rdi); // 부적절한 문장이 들어오는 경우 다음 문장이 실행되지 않고 종료됨
+		// user_check_string((void *)f->R.rdi); // 부적절한 문장이 들어오는 경우 다음 문장이 실행되지 않고 종료됨
 		filesys_create((char *)f->R.rdi, f->R.rsi);
 		break;
 	case SYS_REMOVE:					  /* Delete a file. */
@@ -214,12 +213,15 @@ void syscall_handler(struct intr_frame *f)
 		break;
 	}
 	case SYS_FILESIZE: /* Obtain a file's size. */
-		fd = (int)f->R.rdi;
+	{
+		int fd = (int)f->R.rdi;
 
 		f->R.rax = file_length(process_get_file(fd));
 		break;
+	}
 	case SYS_READ: // TODO: A                   /* Read from a file. */
-		fd = (int)f->R.rdi;
+	{
+		int fd = (int)f->R.rdi;
 		void *buffer = (void *)f->R.rsi;
 		unsigned size = (unsigned)f->R.rdx;
 		struct file *file;
@@ -255,11 +257,13 @@ void syscall_handler(struct intr_frame *f)
 			process_exit_with_status(-1);
 		}
 		break;
+	}
 	case SYS_WRITE:
-	{ // TODO: A               /* Write to a file. */
-		fd = (int)f->R.rdi;
-		const char *buffer = (const char *)f->R.rsi; /* user buffer address */
-		unsigned size = (unsigned)f->R.rdx;
+	{
+		int fd = (int)f->R.rdi;
+		void *buffer = (void *)f->R.rsi;
+		off_t size = f->R.rdx;
+		struct file *file;
 
 		user_check_read(buffer, size);
 
@@ -268,11 +272,17 @@ void syscall_handler(struct intr_frame *f)
 			putbuf(buffer, size);
 			f->R.rax = size;
 		}
+		else if (fd >= 2)
+		{
+			// 열어둔 파일에 값을 입력한다는 의미니까
+			file = process_get_file(fd);
+			f->R.rax = file_write(file, buffer, size);
+			// file_write(struct file * file, const void *buffer, off_t size)
+		}
 		else
 		{
-			f->R.rax = -1;
+			process_exit_with_status(-1);
 		}
-
 		break;
 	}
 	case SYS_SEEK: // TODO: A                   /* Change position in a file. */
